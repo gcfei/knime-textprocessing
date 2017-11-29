@@ -49,11 +49,9 @@
 package org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
-import java.net.MalformedURLException;
+import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.Set;
@@ -72,6 +70,7 @@ import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.util.FileUtil;
 import org.knime.ext.textprocessing.nodes.preprocessing.StreamableFunctionPreprocessingNodeModel;
 import org.knime.ext.textprocessing.nodes.preprocessing.TermPreprocessing;
+import org.knime.ext.textprocessing.nodes.source.parser.FileCollector2;
 
 /**
  *
@@ -135,27 +134,8 @@ public final class StopWordFilterNodeModel2 extends StreamableFunctionPreprocess
     @Override
     protected void internalConfigure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
         if (!m_useBuildinListModel.getBooleanValue()) {
-            getFile();
+            FileCollector2.getURL(m_fileModel.getStringValue(), false);
         }
-    }
-
-    private File getFile() throws InvalidSettingsException {
-        final String file = m_fileModel.getStringValue();
-        File f = null;
-        try {
-            // first try if file string is an URL (files in drop dir come as URLs)
-            final URL url = new URL(file);
-            f = FileUtil.getFileFromURL(url);
-        } catch (MalformedURLException e) {
-            // if no URL try string as path to file
-            f = new File(file);
-        }
-
-        if (!f.isFile() || !f.exists() || !f.canRead()) {
-            throw new InvalidSettingsException("Selected stop word file: " + file + " cannot be accessed!");
-        }
-
-        return f;
     }
 
     /**
@@ -164,10 +144,10 @@ public final class StopWordFilterNodeModel2 extends StreamableFunctionPreprocess
     @Override
     protected void preparePreprocessing(final PortObjectSpec[] inSpecs) throws InvalidSettingsException {
         if (!m_useBuildinListModel.getBooleanValue()) {
-            File f = getFile();
             m_stopWords = new HashSet<String>();
             try {
-                BufferedReader reader = new BufferedReader(new FileReader(f));
+                URL url = FileCollector2.getURL(m_fileModel.getStringValue(), false);
+                BufferedReader reader = new BufferedReader(new InputStreamReader(FileUtil.openStreamWithTimeout(url)));
                 String line;
                 while ((line = reader.readLine()) != null) {
                     m_stopWords.add(line.trim());

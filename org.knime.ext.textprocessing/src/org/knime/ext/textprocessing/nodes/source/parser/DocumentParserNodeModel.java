@@ -49,9 +49,9 @@ package org.knime.ext.textprocessing.nodes.source.parser;
 
 import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -73,6 +73,7 @@ import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.defaultnodesettings.SettingsModelBoolean;
 import org.knime.core.node.defaultnodesettings.SettingsModelString;
+import org.knime.core.util.FileUtil;
 import org.knime.core.util.ThreadPool;
 import org.knime.ext.textprocessing.data.Document;
 import org.knime.ext.textprocessing.data.DocumentCategory;
@@ -193,11 +194,7 @@ public class DocumentParserNodeModel extends NodeModel {
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
         // check selected directory
-        final String dir = m_pathModel.getStringValue();
-        final File f = new File(dir);
-        if (!f.isDirectory() || !f.exists() || !f.canRead()) {
-            throw new InvalidSettingsException("Selected directory: " + dir + " is not valid!");
-        }
+        FileCollector2.getURL(m_pathModel.getStringValue(), true);
 
         // check if specific tokenizer is installed
         if (!TokenizerFactoryRegistry.getTokenizerFactoryMap().containsKey(m_tokenizerModel.getStringValue())) {
@@ -244,12 +241,11 @@ public class DocumentParserNodeModel extends NodeModel {
     @Override
     protected BufferedDataTable[] execute(final BufferedDataTable[] inData, final ExecutionContext exec)
         throws Exception {
-        final File dir = new File(m_pathModel.getStringValue());
+        final String dir = m_pathModel.getStringValue();
         final boolean recursive = m_recursiveModel.getBooleanValue();
         final boolean ignoreHiddenFiles = m_ignoreHiddenFilesModel.getBooleanValue();
 
-        final FileCollector fc = new FileCollector(dir, m_validExtensions, recursive, ignoreHiddenFiles);
-        final List<File> files = fc.getFiles();
+        final List<URL> files = FileCollector2.listFiles(dir, m_validExtensions, recursive, ignoreHiddenFiles);
         final int numberOfFiles = files.size();
 
         final int numberOfThreads = KNIMEConstants.GLOBAL_THREAD_POOL.getMaxThreads();
@@ -261,12 +257,12 @@ public class DocumentParserNodeModel extends NodeModel {
         try {
             m_dtBuilder.openDataTable(exec);
 
-            List<File> chunk = new ArrayList<File>(chunkSize);
-            for (final File f : files) {
+            List<URL> chunk = new ArrayList<URL>(chunkSize);
+            for (final URL f : files) {
                 chunk.add(f);
                 if (chunk.size() >= chunkSize) {
                     pool.enqueue(parseFiles(chunk, exec, semaphore, fileCount, numberOfFiles));
-                    chunk = new ArrayList<File>(chunkSize);
+                    chunk = new ArrayList<URL>(chunkSize);
                 }
             }
             // process last chunk
@@ -292,7 +288,7 @@ public class DocumentParserNodeModel extends NodeModel {
      * @return new anonymous {@link Runnable} instance that parses given files.
      * @throws CanceledExecutionException If execution was canceled.
      */
-    private Runnable parseFiles(final List<File> files, final ExecutionContext exec, final Semaphore semaphore,
+    private Runnable parseFiles(final List<URL> files, final ExecutionContext exec, final Semaphore semaphore,
         final AtomicInteger fileCount, final int noFiles) throws CanceledExecutionException {
         exec.checkCanceled();
         return new Runnable() {
@@ -304,22 +300,23 @@ public class DocumentParserNodeModel extends NodeModel {
 
                     final DocumentParser parser = createParser();
 
-                    for (final File f : files) {
+                    for (final URL f : files) {
                         exec.checkCanceled();
                         final int count = fileCount.incrementAndGet();
                         final double progress = count / (double)noFiles;
                         exec.setProgress(progress, "Parsing file " + count + " of " + noFiles + " ...");
 
-                        LOGGER.info("Parsing file: " + f.getAbsolutePath());
-
                         InputStream is = null;
                         try {
-                            if (f.getName().toLowerCase().endsWith(".gz")) {
-                                is = new BufferedInputStream(new GZIPInputStream(new FileInputStream(f)));
+                            String filepath = FileCollector2.getStringRepresentation(f);
+                            LOGGER.info("Parsing file: " + filepath);
+
+                            if (filepath.toLowerCase().endsWith(".gz")) {
+                                is = new BufferedInputStream(new GZIPInputStream(FileUtil.openStreamWithTimeout(f)));
                             } else {
-                                is = new BufferedInputStream(new FileInputStream(f));
+                                is = new BufferedInputStream(FileUtil.openStreamWithTimeout(f));
                             }
-                            parser.setDocumentFilepath(f.getAbsolutePath());
+                            parser.setDocumentFilepath(filepath);
 
                             // first remove all listeners in order to avoid that two or more listeners are registered,
                             // adding the same document twice or more times.
@@ -328,7 +325,7 @@ public class DocumentParserNodeModel extends NodeModel {
 
                             parser.parseDocument(is);
                         } catch (Exception e) {
-                            LOGGER.error("Could not parse file: " + f.getAbsolutePath().toString(), e);
+                            LOGGER.error("Could not parse file: " + f.toString(), e);
                             setWarningMessage("Could not parse all files properly!");
                         } finally {
                             if (is != null) {
@@ -336,7 +333,7 @@ public class DocumentParserNodeModel extends NodeModel {
                                     is.close();
                                 } catch (IOException e) {
                                     LOGGER.debug("Could not close input stream of file:"
-                                        + f.getAbsolutePath().toString());
+                                        + f.toString());
                                 }
                             }
                         }

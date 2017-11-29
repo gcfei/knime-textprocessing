@@ -62,6 +62,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -71,12 +73,14 @@ import java.util.zip.GZIPOutputStream;
 
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.util.FileUtil;
 import org.knime.ext.textprocessing.data.Document;
 import org.knime.ext.textprocessing.data.DocumentSource;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEvent;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParser;
 import org.knime.ext.textprocessing.nodes.source.parser.FileCollector;
+import org.knime.ext.textprocessing.nodes.source.parser.FileCollector2;
 import org.knime.ext.textprocessing.nodes.source.parser.pubmed.PubMedDocumentParser;
 
 /**
@@ -90,13 +94,11 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
      */
     public static final String SOURCE = "PubMed";
 
-    private static final NodeLogger LOGGER =
-            NodeLogger.getLogger(PubMedDocumentGrabber.class);
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(PubMedDocumentGrabber.class);
 
     private static final String PROTOCOL = "https";
 
     private static final String HOST = "eutils.ncbi.nlm.nih.gov";
-
 
     private static final String SEARCH_PATH = "/entrez/eutils/esearch.fcgi";
 
@@ -104,14 +106,11 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
 
     private static final String SEARCH_QUERY_POSTFIX = "&retmax=";
 
-
     private static final String FETCH_PATH = "/entrez/eutils/efetch.fcgi";
 
     private static final String FETCH_QUERY = "db=pubmed&id=";
 
-    private static final String FETCH_QUERY_POSTFIX =
-        "&retmode=xml&rettype=abstract";
-
+    private static final String FETCH_QUERY_POSTFIX = "&retmode=xml&rettype=abstract";
 
     private static final String BASIC_FILE_NAME = "PubMedAbstracts";
 
@@ -123,15 +122,18 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
 
     private List<Integer> m_idList = new ArrayList<Integer>();
 
+    private File m_tempDir;
+
     /**
      * Creates empty instance of <code>PubMedDocumentGrabber</code>.
      */
     PubMedDocumentGrabber() {
-    	super();
+        super();
     }
 
     /**
      * {@inheritDoc}
+     *
      * @since 2.8
      */
     @Override
@@ -154,8 +156,7 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
      */
     @Override
     @Deprecated
-    public List < Document > grabDocuments(final File directory,
-            final Query query) throws Exception {
+    public List<Document> grabDocuments(final File directory, final Query query) throws Exception {
         if (directory != null && query != null) {
             if (directory.exists() && directory.isDirectory()) {
 
@@ -165,12 +166,11 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
                 try {
                     docs = parseDocuments(directory);
                 } catch (URISyntaxException e) {
-                    LOGGER.warn("Could not find file containing "
-                            + "PubMed documents!");
-                    throw(e);
+                    LOGGER.warn("Could not find file containing " + "PubMed documents!");
+                    throw (e);
                 } catch (Exception e) {
                     LOGGER.warn("Could not parse PubMed documents!");
-                    throw(e);
+                    throw (e);
                 }
 
                 return docs;
@@ -181,10 +181,12 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
 
     /**
      * {@inheritDoc}
+     *
+     * @deprecated
      */
+    @Deprecated
     @Override
-    public void fetchAndParseDocuments(final File directory, final Query query)
-            throws Exception {
+    public void fetchAndParseDocuments(final File directory, final Query query) throws Exception {
         if (directory != null && query != null) {
             if (directory.exists() && directory.isDirectory()) {
 
@@ -193,20 +195,42 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
                 try {
                     parseDocumentsAndNotify(directory);
                 } catch (URISyntaxException e) {
-                    LOGGER.warn("Could not find file containing "
-                            + "PubMed documents!");
-                    throw(e);
+                    LOGGER.warn("Could not find file containing " + "PubMed documents!");
+                    throw (e);
                 } catch (Exception e) {
                     LOGGER.warn("Could not parse PubMed documents!");
-                    throw(e);
+                    throw (e);
                 }
             }
         }
         return;
     }
 
-    private void fetchDocuments(final File directory, final Query query)
-    throws Exception {
+    /**
+     * {@inheritDoc}
+     *
+     * @since 3.5
+     */
+    @Override
+    public void fetchAndParseDocuments(final URL directory, final Query query) throws Exception {
+        if (directory != null && query != null) {
+            fetchDocuments(directory, query);
+
+            try {
+                parseDocumentsAndNotify(directory);
+            } catch (URISyntaxException e) {
+                LOGGER.warn("Could not find file containing " + "PubMed documents!");
+                throw (e);
+            } catch (Exception e) {
+                LOGGER.warn("Could not parse PubMed documents!");
+                throw (e);
+            }
+        }
+        return;
+    }
+
+    @Deprecated
+    private void fetchDocuments(final File directory, final Query query) throws Exception {
         if (directory != null && query != null) {
             if (directory.exists() && directory.isDirectory()) {
 
@@ -225,33 +249,29 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
                     int idEnd = getEnd(idStart, m_idList.size() - 1);
 
                     // setting progress
-                    double progress = (double)idEnd  / (double)m_idList.size()
-                                        * 0.5;
-                    message("Fetching documents from " + idStart + " to "
-                            + idEnd + " of " + m_idList.size(), progress);
+                    double progress = (double)idEnd / (double)m_idList.size() * 0.5;
+                    message("Fetching documents from " + idStart + " to " + idEnd + " of " + m_idList.size(), progress);
 
                     String idString = "";
                     for (int i = idStart; i <= idEnd; i++) {
                         idString += m_idList.get(i) + ",";
                     }
 
-                    String fetchStr = FETCH_QUERY + idString
-                        + FETCH_QUERY_POSTFIX;
+                    String fetchStr = FETCH_QUERY + idString + FETCH_QUERY_POSTFIX;
                     URI uri = new URI(PROTOCOL, HOST, FETCH_PATH, fetchStr, "");
                     pubmed = uri.toURL();
 
                     LOGGER.info("PubMed fetching: " + pubmed.toString());
 
-                    String filename = BASIC_FILE_NAME + count + "."
-                        + FILE_EXTENSION;
+                    String filename = BASIC_FILE_NAME + count + "." + FILE_EXTENSION;
                     try {
                         saveDocument(pubmed, directory, filename);
                     } catch (IOException e) {
                         LOGGER.warn("Could not read PubMed Xml-Website!");
-                        throw(e);
+                        throw (e);
                     } catch (URISyntaxException e) {
                         LOGGER.warn("URL Syntax is not valid!");
-                        throw(e);
+                        throw (e);
                     }
 
                     Thread.sleep(m_delayMillis);
@@ -263,12 +283,71 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         return;
     }
 
+    private void fetchDocuments(final URL directory, final Query query) throws Exception {
+        if (directory != null && query != null) {
+
+            URL pubmed = buildUrl(query, true);
+            LOGGER.info("PubMed Query: " + pubmed.toString());
+
+            // Read search result xml
+            buildResultList(pubmed);
+
+            URL dirURL = directory;
+            // if the dir is remote and files should be deleted after parsing
+            // store the files in a local temp dir instead, and delete after parsing
+            if (getDeleteFiles() && FileUtil.resolveToPath(directory) == null) {
+                m_tempDir = FileUtil.createTempDir("pubmed_doc_grabber", null, false);
+                dirURL = FileUtil.toURL(m_tempDir.getAbsolutePath());
+            }
+
+            // go through all ids (with certain step size)
+            // and download document
+            int idStart = 0;
+            int count = 1;
+            while (idStart < m_idList.size()) {
+                checkCanceled();
+                int idEnd = getEnd(idStart, m_idList.size() - 1);
+
+                // setting progress
+                double progress = (double)idEnd / (double)m_idList.size() * 0.5;
+                message("Fetching documents from " + idStart + " to " + idEnd + " of " + m_idList.size(), progress);
+
+                String idString = "";
+                for (int i = idStart; i <= idEnd; i++) {
+                    idString += m_idList.get(i) + ",";
+                }
+
+                String fetchStr = FETCH_QUERY + idString + FETCH_QUERY_POSTFIX;
+                URI uri = new URI(PROTOCOL, HOST, FETCH_PATH, fetchStr, "");
+                pubmed = uri.toURL();
+
+                LOGGER.info("PubMed fetching: " + pubmed.toString());
+
+                String filename = BASIC_FILE_NAME + count + "." + FILE_EXTENSION;
+                try {
+                    saveDocument(pubmed, dirURL, filename);
+                } catch (IOException e) {
+                    LOGGER.warn("Could not read PubMed Xml-Website!");
+                    throw (e);
+                } catch (URISyntaxException e) {
+                    LOGGER.warn("URL Syntax is not valid!");
+                    throw (e);
+                }
+
+                Thread.sleep(m_delayMillis);
+                idStart = idEnd + 1;
+                count++;
+            }
+        }
+        return;
+    }
+
+    @Deprecated
     private void parseDocumentsAndNotify(final File dir) throws Exception {
 
         DocumentParser parser = new PubMedDocumentParser(getExtractMetaInfo(), getTokenizerName());
 
-        parser.addDocumentParsedListener(
-                new InternalDocumentParsedEventListener());
+        parser.addDocumentParsedListener(new InternalDocumentParsedEventListener());
 
         parser.setDocumentSource(new DocumentSource(SOURCE));
         if (getDocumentCategory() != null) {
@@ -287,15 +366,13 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         int currFile = 1;
         for (File f : files) {
             double progress = (double)currFile / (double)fileCount;
-            setProgress(progress, "Parsing file " + currFile + " of "
-                    + fileCount);
+            setProgress(progress, "Parsing file " + currFile + " of " + fileCount);
             checkCanceled();
             currFile++;
             LOGGER.info("Parsing file: " + f.getAbsolutePath());
 
             InputStream is;
-            if (f.getName().toLowerCase().endsWith(".gz")
-                    || f.getName().toLowerCase().endsWith(".zip")) {
+            if (f.getName().toLowerCase().endsWith(".gz") || f.getName().toLowerCase().endsWith(".zip")) {
                 is = new GZIPInputStream(new FileInputStream(f));
             } else {
                 is = new FileInputStream(f);
@@ -314,8 +391,68 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         return;
     }
 
+    private void parseDocumentsAndNotify(final URL dir) throws Exception {
+
+        DocumentParser parser = new PubMedDocumentParser(getExtractMetaInfo(), getTokenizerName());
+
+        parser.addDocumentParsedListener(new InternalDocumentParsedEventListener());
+
+        parser.setDocumentSource(new DocumentSource(SOURCE));
+        if (getDocumentCategory() != null) {
+            parser.setDocumentCategory(getDocumentCategory());
+        }
+        if (getDocumentType() != null) {
+            parser.setDocumentType(getDocumentType());
+        }
+
+        List<String> validExtensions = new ArrayList<String>();
+        validExtensions.add(FILE_EXTENSION);
+
+        List<URL> files =
+            FileCollector2.listFiles(FileCollector2.getStringRepresentation(dir), validExtensions, false, true);
+        int fileCount = files.size();
+        int currFile = 1;
+        for (URL f : files) {
+            String filename = FileCollector2.getStringRepresentation(f);
+            double progress = (double)currFile / (double)fileCount;
+            setProgress(progress, "Parsing file " + currFile + " of " + fileCount);
+            checkCanceled();
+            currFile++;
+            LOGGER.info("Parsing file: " + filename);
+
+            InputStream is;
+            if (filename.toLowerCase().endsWith(".gz") || filename.toLowerCase().endsWith(".zip")) {
+                is = new GZIPInputStream(FileUtil.openStreamWithTimeout(f));
+            } else {
+                is = FileUtil.openStreamWithTimeout(f);
+            }
+            parser.setDocumentFilepath(filename);
+            parser.parseDocument(is);
+        }
+
+        if (getDeleteFiles()) {
+            for (URL file : files) {
+                Path localPath = FileUtil.resolveToPath(file);
+                if (localPath != null) {
+                    try {
+                        Files.delete(localPath);
+                    } catch (IOException ex) {
+                        LOGGER.warn("Unable to delete file '" + FileCollector2.getStringRepresentation(file));
+                    }
+                } else {
+                    // if delete files flag is true and file is remote, it means a temp dir has been
+                    // created to store the files -> delete the temp dir
+                    if (m_tempDir != null && !FileUtil.deleteRecursively(m_tempDir)) {
+                        LOGGER.warn("Unable to delete temp dir " + m_tempDir.getAbsolutePath());
+                    }
+                }
+            }
+        }
+        return;
+    }
+
     @Deprecated
-    private List < Document > parseDocuments(final File dir) throws Exception {
+    private List<Document> parseDocuments(final File dir) throws Exception {
         List<Document> docs = new ArrayList<Document>();
 
         DocumentParser parser = new PubMedDocumentParser(getTokenizerName());
@@ -336,15 +473,13 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         int currFile = 1;
         for (File f : files) {
             double progress = (double)currFile / (double)fileCount;
-            setProgress(progress, "Parsing file " + currFile + " of "
-                    + fileCount);
+            setProgress(progress, "Parsing file " + currFile + " of " + fileCount);
             checkCanceled();
             currFile++;
             LOGGER.info("Parsing file: " + f.getAbsolutePath());
 
             InputStream is;
-            if (f.getName().toLowerCase().endsWith(".gz")
-                    || f.getName().toLowerCase().endsWith(".zip")) {
+            if (f.getName().toLowerCase().endsWith(".gz") || f.getName().toLowerCase().endsWith(".zip")) {
                 is = new GZIPInputStream(new FileInputStream(f));
             } else {
                 is = new FileInputStream(f);
@@ -366,9 +501,9 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         return docs;
     }
 
-
-    private void saveDocument(final URL url, final File dir,
-            final String filename) throws IOException, URISyntaxException {
+    @Deprecated
+    private void saveDocument(final URL url, final File dir, final String filename)
+        throws IOException, URISyntaxException {
 
         File dst = new File(dir.getAbsolutePath() + "/" + filename);
         if (!dst.exists()) {
@@ -408,6 +543,53 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         out.close();
     }
 
+    private void saveDocument(final URL url, final URL dir, final String filename)
+        throws IOException, URISyntaxException {
+
+        // assume the dir is empty
+        URL outUrl = FileUtil.toURL(FileCollector2.getStringRepresentation(dir) + "/" + filename);
+        Path localPath = FileUtil.resolveToPath(outUrl);
+        OutputStream tempOut;
+        if (localPath != null) {
+            tempOut = Files.newOutputStream(localPath);
+        } else {
+            URLConnection urlConnection = FileUtil.openOutputConnection(outUrl, "PUT");
+            tempOut = urlConnection.getOutputStream();
+        }
+
+        URLConnection conn = url.openConnection();
+        conn.setConnectTimeout(60000);
+        try {
+            conn.connect();
+        } catch (SocketTimeoutException e) {
+            LOGGER.error("Timeout! Connection could not be established.");
+            throw e;
+        } catch (IOException e) {
+            LOGGER.error("Connection could not be opened.");
+            throw e;
+        }
+        InputStreamReader isr = new InputStreamReader(conn.getInputStream(), "UTF-8");
+        BufferedReader in = new BufferedReader(isr);
+        OutputStream out = new GZIPOutputStream(tempOut);
+        OutputStreamWriter writer = new OutputStreamWriter(out, "UTF-8");
+
+        // Transfer bytes from in to out
+        try {
+            String line;
+            while ((line = in.readLine()) != null) {
+                writer.write(line);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Documents could not be downloaded.");
+            writer.close();
+            throw e;
+        }
+
+        in.close();
+        writer.close();
+        out.close();
+    }
+
     private int getEnd(final int start, final int max) {
         int end = start + m_stepSize;
         if (end > max) {
@@ -423,7 +605,7 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
     }
 
     private URL buildUrl(final Query query, final boolean applyMaxResults)
-    throws URISyntaxException, MalformedURLException {
+        throws URISyntaxException, MalformedURLException {
 
         // Build search url
         String str = SEARCH_QUERY + query.getQuery();
@@ -435,12 +617,10 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         return uri.toURL();
     }
 
-    private int buildResultList(final URL url) throws IOException,
-    CanceledExecutionException {
+    private int buildResultList(final URL url) throws IOException, CanceledExecutionException {
         // Read search result xml
         int results = -1;
-        BufferedReader r = new BufferedReader(
-                new InputStreamReader(url.openStream()));
+        BufferedReader r = new BufferedReader(new InputStreamReader(url.openStream()));
         m_idList.clear();
         String line = null;
         while ((line = r.readLine()) != null) {
@@ -488,31 +668,27 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
     }
 
     /**
-     * @param delayMillis the delay time between two requests in milliseconds
-     * to set.
+     * @param delayMillis the delay time between two requests in milliseconds to set.
      */
     public void setDelayMillis(final long delayMillis) {
         m_delayMillis = delayMillis;
     }
 
     /**
-     * @return the stepSize which specifies the number of abstracts stored in
-     * one file.
+     * @return the stepSize which specifies the number of abstracts stored in one file.
      */
     public int getStepSize() {
         return m_stepSize;
     }
 
     /**
-     * @param stepSize the stepSize to set, which specifies the number of
-     * abstracts stored in one file.
+     * @param stepSize the stepSize to set, which specifies the number of abstracts stored in one file.
      */
     public void setStepSize(final int stepSize) {
         m_stepSize = stepSize;
     }
 
-    private class InternalDocumentParsedEventListener
-    implements DocumentParsedEventListener {
+    private class InternalDocumentParsedEventListener implements DocumentParsedEventListener {
         /**
          * {@inheritDoc}
          */

@@ -48,6 +48,7 @@
 package org.knime.ext.textprocessing.nodes.source.grabber;
 
 import java.io.File;
+import java.net.URL;
 import java.util.List;
 
 import org.knime.ext.textprocessing.data.Document;
@@ -112,7 +113,25 @@ public interface DocumentGrabber {
      * @throws Exception If grabber cannot connect to the server or something
      * else goes wrong.
      */
+    @Deprecated
     public void fetchAndParseDocuments(final File directory, final Query query)
+    throws Exception;
+
+    /**
+     * Fetches and the documents resulting from the given query and writes
+     * them to the given directory. Afterwards the documents are parsed and
+     * instances of {@link org.knime.ext.textprocessing.data.Document}s are
+     * created. After each parsed document all registered
+     * {@link org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener}
+     * are notified.
+     *
+     * @param directory The directory to save the documents to.
+     * @param query The query to send to the bibliographic database.
+     * @throws Exception If grabber cannot connect to the server or something
+     * else goes wrong.
+     * @since 3.5
+     */
+    public void fetchAndParseDocuments(final URL directory, final Query query)
     throws Exception;
 
     /**

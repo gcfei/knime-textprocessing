@@ -233,7 +233,7 @@ public class DocumentGrabberNodeDialog extends DefaultNodeSettingsPane {
         super.saveAdditionalSettingsTo(settings);
 
         // check the validity of the directory path
-        DocumentGrabberNodeModel.getFile(m_directoryModel.getStringValue());
+        DocumentGrabberNodeModel.checkDir(m_directoryModel.getStringValue());
     }
 
     /**

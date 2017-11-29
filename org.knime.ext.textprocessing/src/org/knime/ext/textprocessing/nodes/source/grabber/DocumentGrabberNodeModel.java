@@ -49,8 +49,8 @@ package org.knime.ext.textprocessing.nodes.source.grabber;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.nio.file.InvalidPathException;
+import java.util.ArrayList;
 
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpecCreator;
@@ -75,6 +75,7 @@ import org.knime.ext.textprocessing.data.Document;
 import org.knime.ext.textprocessing.data.DocumentCategory;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEvent;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener;
+import org.knime.ext.textprocessing.nodes.source.parser.FileCollector2;
 import org.knime.ext.textprocessing.nodes.tokenization.MissingTokenizerException;
 import org.knime.ext.textprocessing.nodes.tokenization.TokenizerFactoryRegistry;
 import org.knime.ext.textprocessing.util.DocumentDataTableBuilder;
@@ -168,6 +169,7 @@ public class DocumentGrabberNodeModel extends NodeModel {
     }
 
     private ColumnRearranger createColumnRearranger(final DataTableSpec dataSpec) throws InvalidSettingsException {
+
         ColumnRearranger cR = new ColumnRearranger(dataSpec);
         if (m_appendQueryColumnModel.getBooleanValue()) {
             cR.append(new QueryStringCellFactory(QUERYCOL_NAME, m_queryModel.getStringValue()));
@@ -205,7 +207,7 @@ public class DocumentGrabberNodeModel extends NodeModel {
 
                 grabber.removeAllDocumentParsedListener();
                 grabber.addDocumentParsedListener(new InternalDocumentParsedEventListener());
-                grabber.fetchAndParseDocuments(FileUtil.getFileFromURL(FileUtil.toURL(m_directoryModel.getStringValue())), query);
+                grabber.fetchAndParseDocuments(FileCollector2.getURL(m_directoryModel.getStringValue(), true), query);
             }
 
             BufferedDataTable docTable = m_dtBuilder.getAndCloseDataTable();
@@ -220,20 +222,22 @@ public class DocumentGrabberNodeModel extends NodeModel {
         }
     }
 
-    static final File getFile(final String dir) throws InvalidSettingsException {
+    static final void checkDir(final String dir) throws InvalidSettingsException {
         try {
-            File directoryPath = FileUtil.getFileFromURL(FileUtil.toURL(dir));
-
-            if (!directoryPath.isDirectory()) {
-                throw new InvalidSettingsException("Selected directory: " + dir + " is not a directory!");
-            } else if (!directoryPath.canWrite()) {
-                throw new InvalidSettingsException("Selected directory: " + dir + " is not writable!");
-            } else if (directoryPath.listFiles().length > 0) {
-                throw new InvalidSettingsException("Selected directory: " + dir + " is not empty!");
+            File localPath = FileUtil.getFileFromURL(FileCollector2.getURL(dir, true));
+            // additional check
+            if (localPath != null) {
+                if (!localPath.canWrite()) {
+                    throw new InvalidSettingsException("Selected directory: " + dir + " is not writable!");
+                } else if (localPath.listFiles().length > 0) {
+                    throw new InvalidSettingsException("Selected directory: " + dir + " is not empty!");
+                }
+            } else {
+                if (!FileCollector2.listFiles(dir, new ArrayList<String>(), true, true).isEmpty()) {
+                    throw new InvalidSettingsException("Selected directory: " + dir + " is not empty!");
+                }
             }
-
-            return directoryPath;
-        } catch (InvalidPathException | MalformedURLException e) {
+        } catch (InvalidPathException e) {
             throw new InvalidSettingsException("Invalid directory path!");
         }
     }

@@ -63,7 +63,7 @@ import org.knime.core.util.FileUtil;
  * recursively or not.
  *
  * @author Andisa Dewi, KNIME.com
- * @since 3.5
+ * @since 3.8
  */
 public class FileCollector2 {
 

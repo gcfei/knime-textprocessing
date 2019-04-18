@@ -129,7 +129,7 @@ public interface DocumentGrabber {
      * @param query The query to send to the bibliographic database.
      * @throws Exception If grabber cannot connect to the server or something
      * else goes wrong.
-     * @since 3.5
+     * @since 3.8
      */
     public void fetchAndParseDocuments(final URL directory, final Query query)
     throws Exception;

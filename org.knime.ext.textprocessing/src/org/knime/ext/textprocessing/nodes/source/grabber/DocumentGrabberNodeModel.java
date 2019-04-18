@@ -163,7 +163,7 @@ public class DocumentGrabberNodeModel extends NodeModel {
         }
 
         // check target directory
-        getFile(m_directoryModel.getStringValue());
+        checkDir(m_directoryModel.getStringValue());
 
         return new DataTableSpec[]{createColumnRearranger(m_dtBuilder.createDataTableSpec()).createSpec()};
     }

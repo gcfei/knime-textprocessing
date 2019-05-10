@@ -131,8 +131,9 @@ public interface DocumentGrabber {
      * else goes wrong.
      * @since 3.8
      */
-    public void fetchAndParseDocuments(final URL directory, final Query query)
-    throws Exception;
+    default public void fetchAndParseDocuments(final URL directory, final Query query) throws Exception {
+        fetchAndParseDocuments(new File(directory.getFile()), query);
+    }
 
     /**
      * Adds the given {@link org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener}

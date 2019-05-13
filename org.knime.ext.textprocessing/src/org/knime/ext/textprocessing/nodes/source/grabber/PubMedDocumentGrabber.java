@@ -167,6 +167,10 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
                     docs = parseDocuments(directory);
                 } catch (URISyntaxException e) {
                     LOGGER.warn("Could not find file containing " + "PubMed documents!");
+                    /**
+                     * TODO: if you auto-format existing code (which you don't have to), make sure that you fix changes
+                     * like this, where the '+' is not required any more.
+                     */
                     throw (e);
                 } catch (Exception e) {
                     LOGGER.warn("Could not parse PubMed documents!");
@@ -213,6 +217,12 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
      */
     @Override
     public void fetchAndParseDocuments(final URL directory, final Query query) throws Exception {
+        /**
+         * TODO: Instead of checking that both params are not null (and not complaining if they are null), you should
+         * check if these arguments are null and, if so, throw an unchecked exception. The reason for this is that
+         * you want your exception to be thrown as early as possible when something is wrong. You can to this
+         * with CheckUtils.checkArgumentNotNull.
+         */
         if (directory != null && query != null) {
             fetchDocuments(directory, query);
 
@@ -284,6 +294,13 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
     }
 
     private void fetchDocuments(final URL directory, final Query query) throws Exception {
+        /**
+         * TODO: between this method and the overloaded fetchDocuments(final File directory, final Query query), there
+         * is a lot of duplicate code. Duplicate code is never a good thing, since it bloats up our code base. Also,
+         * if we fix some bug in one of the two duplicates in the future, we might miss the other. Therefore, I'd
+         * suggest refactoring duplicate code into a private method such that both methods can use it
+         * (the same is true for the other methods that were deprecated in this class).
+         */
         if (directory != null && query != null) {
 
             URL pubmed = buildUrl(query, true);
@@ -545,6 +562,11 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
 
     private void saveDocument(final URL url, final URL dir, final String filename)
         throws IOException, URISyntaxException {
+        /**
+         * TODO: I'm getting many warnings in this class, such as "this method can be declared as static" or
+         * "potential resource leak, this resource should be managed with try-with-resources". Can you address these
+         * warnings please?
+         */
 
         // assume the dir is empty
         URL outUrl = FileUtil.toURL(FileCollector2.getStringRepresentation(dir) + "/" + filename);

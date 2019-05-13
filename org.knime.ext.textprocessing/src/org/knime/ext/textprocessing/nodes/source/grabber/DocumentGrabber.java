@@ -132,6 +132,10 @@ public interface DocumentGrabber {
      * @since 3.8
      */
     default public void fetchAndParseDocuments(final URL directory, final Query query) throws Exception {
+        /**
+         * TODO: I know that the old fetchAndParseDocuments method does this as well, but you should not throw a
+         * generic exception, but instead throw proper, specific exceptions.
+         */
         fetchAndParseDocuments(new File(directory.getFile()), query);
     }
 

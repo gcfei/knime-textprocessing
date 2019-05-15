@@ -1036,4 +1036,7 @@
             TagBuilder="org.knime.ext.textprocessing.data.ExtendedFTBCrabbeCanditeTag">
       </TagSet>
    </extension>
+   <extension point="org.knime.database.node.workflow.migration.NodeMigrationRule">
+      <Rule class="org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter.StopWordFilterNodeMigrationRule"/>
+   </extension>
 </plugin>

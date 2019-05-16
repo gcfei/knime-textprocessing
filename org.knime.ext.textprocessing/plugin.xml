@@ -1038,5 +1038,8 @@
    </extension>
    <extension point="org.knime.database.node.workflow.migration.NodeMigrationRule">
       <Rule class="org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter.StopWordFilterNodeMigrationRule"/>
+      <Rule class="org.knime.ext.textprocessing.nodes.transformation.uniquetermextractor.UniqueTermExtractorNodeMigrationRule1"/>
+      <Rule class="org.knime.ext.textprocessing.nodes.transformation.uniquetermextractor.UniqueTermExtractorNodeMigrationRule2"/>
+      <Rule class="org.knime.ext.textprocessing.nodes.transformation.uniquetermextractor.UniqueTermExtractorNodeMigrationRule3"/>
    </extension>
 </plugin>

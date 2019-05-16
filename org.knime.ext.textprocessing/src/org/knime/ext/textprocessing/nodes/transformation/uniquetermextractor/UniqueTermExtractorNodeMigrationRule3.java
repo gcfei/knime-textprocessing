@@ -43,44 +43,71 @@
  * ------------------------------------------------------------------------
  */
 
-package org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter;
+package org.knime.ext.textprocessing.nodes.transformation.uniquetermextractor;
+
+import java.util.Set;
 
 import org.knime.core.node.NodeFactory;
 import org.knime.node.workflow.migration.MigrationException;
 import org.knime.node.workflow.migration.MigrationNodeMatchResult;
 import org.knime.node.workflow.migration.NodeMigrationAction;
 import org.knime.node.workflow.migration.NodeMigrationRule;
-import org.knime.node.workflow.migration.NodeSettingsMigrationManager;
 import org.knime.node.workflow.migration.model.MigrationNode;
+import org.knime.node.workflow.migration.model.MigrationNodeConnection;
 
 /**
- * Node migration rule for the <em>stop word filter</em> node.
- *
- * @author Marten Pfannenschmidt
- * @since 3.8
+ * @author Marc Bux, KNIME GmbH, Berlin, Germany
  */
-public class StopWordFilterNodeMigrationRule extends NodeMigrationRule {
+public class UniqueTermExtractorNodeMigrationRule3 extends NodeMigrationRule {
 
     @Override
     protected Class<? extends NodeFactory<?>> getReplacementNodeFactoryClass(final MigrationNode migrationNode,
         final MigrationNodeMatchResult matchResult) {
-        return StopWordFilterNodeFactory3.class;
+        return UniqueTermExtractorNodeFactory.class;
     }
+
+    MigrationNode predecessor;
 
     @Override
     protected MigrationNodeMatchResult match(final MigrationNode migrationNode) {
+
+        boolean isGroupBy = "org.knime.base.node.preproc.groupby.GroupByNodeFactory"
+            .equals(migrationNode.getOriginalNodeFactoryClassName());
+
+        boolean singleTwoLevelPredecessorExistsAndIsBOWCreator = false;
+        boolean singlePredecessorExistsAndIsTerm2String = false;
+
+        if (isGroupBy) {
+            Set<MigrationNodeConnection> inConnections =
+                migrationNode.getOriginalInputPorts().get(1).getConnections();
+            if (inConnections.size() == 1) {
+                predecessor = inConnections.iterator().next().getSourcePort().getMigrationNode();
+                String className = predecessor.getOriginalNodeFactoryClassName();
+                singlePredecessorExistsAndIsTerm2String = "org.knime.ext.textprocessing.nodes.transformation.termtostring.TermToStringNodeFactory"
+                    .equals(className);
+                if (singlePredecessorExistsAndIsTerm2String) {
+                    inConnections =
+                            predecessor.getOriginalInputPorts().get(1).getConnections();
+                    if (inConnections.size() == 1) {
+                        predecessor = inConnections.iterator().next().getSourcePort().getMigrationNode();
+                        className = predecessor.getOriginalNodeFactoryClassName();
+                        singleTwoLevelPredecessorExistsAndIsBOWCreator = "org.knime.ext.textprocessing.nodes.transformation.bow.BagOfWordsNodeFactory2"
+                                .equals(className);
+                    }
+                }
+            }
+        }
+
+        //        return MigrationNodeMatchResult.of(null);
         return MigrationNodeMatchResult.of(migrationNode,
-            "org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter.StopWordFilterNodeFactory"
-                .equals(migrationNode.getOriginalNodeFactoryClassName())
-                || "org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter.StopWordFilterNodeFactory2"
-                    .equals(migrationNode.getOriginalNodeFactoryClassName()) ? NodeMigrationAction.REPLACE : null);
+            isGroupBy && singleTwoLevelPredecessorExistsAndIsBOWCreator && singlePredecessorExistsAndIsTerm2String
+                ? NodeMigrationAction.DELETE : null);
     }
 
     @Override
-    protected void migrate(final MigrationNode migrationNode, final MigrationNodeMatchResult matchResult) throws MigrationException {
-        NodeSettingsMigrationManager mgr = createSettingsManager(migrationNode).copyAllModelSettings().toIdentical();
-        associateOriginalInputPortsWithNew(migrationNode, 1);
-        associateOriginalOutputPortsWithNew(migrationNode, 1);
+    protected void migrate(final MigrationNode migrationNode, final MigrationNodeMatchResult matchResult)
+        throws MigrationException {
+        associateOriginalPortWithNew(migrationNode.getOriginalOutputPorts().get(1), migrationNode.getNewOutputPorts().get(1));
     }
 
 }

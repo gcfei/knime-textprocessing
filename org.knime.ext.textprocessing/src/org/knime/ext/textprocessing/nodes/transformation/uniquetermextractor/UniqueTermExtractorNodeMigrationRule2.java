@@ -43,44 +43,57 @@
  * ------------------------------------------------------------------------
  */
 
-package org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter;
+package org.knime.ext.textprocessing.nodes.transformation.uniquetermextractor;
+
+import java.util.Set;
 
 import org.knime.core.node.NodeFactory;
 import org.knime.node.workflow.migration.MigrationException;
 import org.knime.node.workflow.migration.MigrationNodeMatchResult;
 import org.knime.node.workflow.migration.NodeMigrationAction;
 import org.knime.node.workflow.migration.NodeMigrationRule;
-import org.knime.node.workflow.migration.NodeSettingsMigrationManager;
 import org.knime.node.workflow.migration.model.MigrationNode;
+import org.knime.node.workflow.migration.model.MigrationNodeConnection;
 
 /**
- * Node migration rule for the <em>stop word filter</em> node.
- *
- * @author Marten Pfannenschmidt
- * @since 3.8
+ * @author Marc Bux, KNIME GmbH, Berlin, Germany
  */
-public class StopWordFilterNodeMigrationRule extends NodeMigrationRule {
+public class UniqueTermExtractorNodeMigrationRule2 extends NodeMigrationRule {
 
     @Override
     protected Class<? extends NodeFactory<?>> getReplacementNodeFactoryClass(final MigrationNode migrationNode,
         final MigrationNodeMatchResult matchResult) {
-        return StopWordFilterNodeFactory3.class;
+        return UniqueTermExtractorNodeFactory.class;
     }
 
     @Override
     protected MigrationNodeMatchResult match(final MigrationNode migrationNode) {
-        return MigrationNodeMatchResult.of(migrationNode,
-            "org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter.StopWordFilterNodeFactory"
-                .equals(migrationNode.getOriginalNodeFactoryClassName())
-                || "org.knime.ext.textprocessing.nodes.preprocessing.stopwordfilter.StopWordFilterNodeFactory2"
-                    .equals(migrationNode.getOriginalNodeFactoryClassName()) ? NodeMigrationAction.REPLACE : null);
+
+        boolean isTerm2String = "org.knime.ext.textprocessing.nodes.transformation.termtostring.TermToStringNodeFactory"
+            .equals(migrationNode.getOriginalNodeFactoryClassName());
+
+        boolean singlePredecessorExistsAndIsBOWCreator = true;
+        //        migrationNode.getOriginalInputPorts().get(0).getConnections().iterator().next().getSourcePort().getMigrationNode().getOriginalNodeFactoryClassName()
+
+        boolean singleSuccessorExistsAndIsGroupBy = false;
+        if (isTerm2String) {
+            Set<MigrationNodeConnection> outConnections =
+                migrationNode.getOriginalOutputPorts().get(1).getConnections();
+            if (outConnections.size() == 1) {
+                MigrationNode successor = outConnections.iterator().next().getDestinationPort().getMigrationNode();
+                singleSuccessorExistsAndIsGroupBy = "org.knime.base.node.preproc.groupby.GroupByNodeFactory"
+                    .equals(successor.getOriginalNodeFactoryClassName());
+            }
+
+        }
+
+//        return MigrationNodeMatchResult.of(null);
+        return MigrationNodeMatchResult.of(migrationNode, isTerm2String && singleSuccessorExistsAndIsGroupBy ? NodeMigrationAction.DELETE : null);
     }
 
     @Override
-    protected void migrate(final MigrationNode migrationNode, final MigrationNodeMatchResult matchResult) throws MigrationException {
-        NodeSettingsMigrationManager mgr = createSettingsManager(migrationNode).copyAllModelSettings().toIdentical();
-        associateOriginalInputPortsWithNew(migrationNode, 1);
-        associateOriginalOutputPortsWithNew(migrationNode, 1);
+    protected void migrate(final MigrationNode migrationNode, final MigrationNodeMatchResult matchResult)
+        throws MigrationException {
     }
 
 }

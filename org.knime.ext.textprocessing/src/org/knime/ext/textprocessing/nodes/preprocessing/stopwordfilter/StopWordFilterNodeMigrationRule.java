@@ -83,4 +83,12 @@ public class StopWordFilterNodeMigrationRule extends NodeMigrationRule {
         associateOriginalOutputPortsWithNew(migrationNode, 1);
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String getMigrationType() {
+        return "Deprecation handling";
+    }
+
 }

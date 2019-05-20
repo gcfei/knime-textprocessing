@@ -72,8 +72,8 @@ public class UniqueTermExtractorNodeMigrationRule2 extends NodeMigrationRule {
         boolean isTerm2String = "org.knime.ext.textprocessing.nodes.transformation.termtostring.TermToStringNodeFactory"
             .equals(migrationNode.getOriginalNodeFactoryClassName());
 
-        boolean singlePredecessorExistsAndIsBOWCreator = true;
-        //        migrationNode.getOriginalInputPorts().get(0).getConnections().iterator().next().getSourcePort().getMigrationNode().getOriginalNodeFactoryClassName()
+        // TODO
+//        boolean singlePredecessorExistsAndIsBOWCreator = true;
 
         boolean singleSuccessorExistsAndIsGroupBy = false;
         if (isTerm2String) {
@@ -94,6 +94,11 @@ public class UniqueTermExtractorNodeMigrationRule2 extends NodeMigrationRule {
     @Override
     protected void migrate(final MigrationNode migrationNode, final MigrationNodeMatchResult matchResult)
         throws MigrationException {
+    }
+
+    @Override
+    public String getMigrationType() {
+        return "Specialized pattern detected";
     }
 
 }

@@ -47,7 +47,10 @@ package org.knime.ext.textprocessing.nodes.transformation.uniquetermextractor;
 
 import java.util.Set;
 
+import org.knime.base.node.preproc.rename.RenameNodeFactory;
 import org.knime.core.node.NodeFactory;
+import org.knime.core.node.NodeSettings;
+import org.knime.core.node.NodeSettingsWO;
 import org.knime.node.workflow.migration.MigrationException;
 import org.knime.node.workflow.migration.MigrationNodeMatchResult;
 import org.knime.node.workflow.migration.NodeMigrationAction;
@@ -63,7 +66,7 @@ public class UniqueTermExtractorNodeMigrationRule3 extends NodeMigrationRule {
     @Override
     protected Class<? extends NodeFactory<?>> getReplacementNodeFactoryClass(final MigrationNode migrationNode,
         final MigrationNodeMatchResult matchResult) {
-        return UniqueTermExtractorNodeFactory.class;
+        return RenameNodeFactory.class;
     }
 
     MigrationNode predecessor;
@@ -98,16 +101,33 @@ public class UniqueTermExtractorNodeMigrationRule3 extends NodeMigrationRule {
             }
         }
 
-        //        return MigrationNodeMatchResult.of(null);
         return MigrationNodeMatchResult.of(migrationNode,
             isGroupBy && singleTwoLevelPredecessorExistsAndIsBOWCreator && singlePredecessorExistsAndIsTerm2String
-                ? NodeMigrationAction.DELETE : null);
+                ? NodeMigrationAction.REPLACE : null);
     }
 
     @Override
     protected void migrate(final MigrationNode migrationNode, final MigrationNodeMatchResult matchResult)
         throws MigrationException {
+        NodeSettingsWO settings = getNewNodeModelSettings(migrationNode);
+        NodeSettings all = new NodeSettings("all_columns");
+        NodeSettings sub1 = new NodeSettings("0");
+        sub1.addString("old_column_name", "Term");
+        sub1.addString("new_column_name", "Term as String");
+        sub1.addInt("new_column_type", 0);
+        all.addNodeSettings(sub1);
+        NodeSettings sub2 = new NodeSettings("1");
+        sub2.addString("old_column_name", "DF");
+        sub2.addString("new_column_name", "Document");
+        sub2.addInt("new_column_type", 0);
+        all.addNodeSettings(sub2);
+        settings.addNodeSettings(all);
         associateOriginalPortWithNew(migrationNode.getOriginalOutputPorts().get(1), migrationNode.getNewOutputPorts().get(1));
+    }
+
+    @Override
+    public String getMigrationType() {
+        return "Specialized pattern detected";
     }
 
 }

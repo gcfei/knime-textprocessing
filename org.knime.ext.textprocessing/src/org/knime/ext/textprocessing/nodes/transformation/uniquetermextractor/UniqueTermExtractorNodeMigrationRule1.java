@@ -48,6 +48,7 @@ package org.knime.ext.textprocessing.nodes.transformation.uniquetermextractor;
 import java.util.Set;
 
 import org.knime.core.node.NodeFactory;
+import org.knime.core.node.NodeSettingsWO;
 import org.knime.node.workflow.migration.MigrationException;
 import org.knime.node.workflow.migration.MigrationNodeMatchResult;
 import org.knime.node.workflow.migration.NodeMigrationAction;
@@ -102,7 +103,14 @@ public class UniqueTermExtractorNodeMigrationRule1 extends NodeMigrationRule {
     @Override
     protected void migrate(final MigrationNode migrationNode, final MigrationNodeMatchResult matchResult)
         throws MigrationException {
+        NodeSettingsWO settings = getNewNodeModelSettings(migrationNode);
+        settings.addBoolean("append_freq_cols", true);
         associateOriginalInputPortWithNew(migrationNode, 1, 1);
+    }
+
+    @Override
+    public String getMigrationType() {
+        return "Specialized pattern detected";
     }
 
 }

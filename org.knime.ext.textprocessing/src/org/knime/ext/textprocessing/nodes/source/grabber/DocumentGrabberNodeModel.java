@@ -49,8 +49,8 @@ package org.knime.ext.textprocessing.nodes.source.grabber;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.InvalidPathException;
-import java.util.ArrayList;
 
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpecCreator;
@@ -75,10 +75,10 @@ import org.knime.ext.textprocessing.data.Document;
 import org.knime.ext.textprocessing.data.DocumentCategory;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEvent;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener;
-import org.knime.ext.textprocessing.nodes.source.parser.FileCollector2;
 import org.knime.ext.textprocessing.nodes.tokenization.MissingTokenizerException;
 import org.knime.ext.textprocessing.nodes.tokenization.TokenizerFactoryRegistry;
 import org.knime.ext.textprocessing.util.DocumentDataTableBuilder;
+import org.knime.ext.textprocessing.util.UrlFileUtil;
 
 /**
  *
@@ -121,25 +121,26 @@ public class DocumentGrabberNodeModel extends NodeModel {
      */
     static final String QUERYCOL_NAME = "Query";
 
-    private SettingsModelString m_queryModel = DocumentGrabberNodeDialog.getQueryModel();
+    private final SettingsModelString m_queryModel = DocumentGrabberNodeDialog.getQueryModel();
 
-    private SettingsModelIntegerBounded m_maxResultsModel = DocumentGrabberNodeDialog.getMaxResultsModel();
+    private final SettingsModelIntegerBounded m_maxResultsModel = DocumentGrabberNodeDialog.getMaxResultsModel();
 
-    private SettingsModelString m_dataBaseModel = DocumentGrabberNodeDialog.getDataBaseModel();
+    private final SettingsModelString m_dataBaseModel = DocumentGrabberNodeDialog.getDataBaseModel();
 
-    private SettingsModelBoolean m_deleteFilesModel = DocumentGrabberNodeDialog.getDeleteFilesModel();
+    private final SettingsModelBoolean m_deleteFilesModel = DocumentGrabberNodeDialog.getDeleteFilesModel();
 
-    private SettingsModelString m_directoryModel = DocumentGrabberNodeDialog.getDirectoryModel();
+    private final SettingsModelString m_directoryModel = DocumentGrabberNodeDialog.getDirectoryModel();
 
-    private SettingsModelString m_categoryModel = DocumentGrabberNodeDialog.getDocumentCategoryModel();
+    private final SettingsModelString m_categoryModel = DocumentGrabberNodeDialog.getDocumentCategoryModel();
 
-    private SettingsModelString m_typeModel = DocumentGrabberNodeDialog.getDocumentTypeModel();
+    private final SettingsModelString m_typeModel = DocumentGrabberNodeDialog.getDocumentTypeModel();
 
-    private SettingsModelBoolean m_extractMetaInfoSettingsModel = DocumentGrabberNodeDialog.getExtractMetaInfoModel();
+    private final SettingsModelBoolean m_extractMetaInfoSettingsModel =
+        DocumentGrabberNodeDialog.getExtractMetaInfoModel();
 
-    private SettingsModelBoolean m_appendQueryColumnModel = DocumentGrabberNodeDialog.getAppendQueryColumnModel();
+    private final SettingsModelBoolean m_appendQueryColumnModel = DocumentGrabberNodeDialog.getAppendQueryColumnModel();
 
-    private SettingsModelString m_tokenizerModel = DocumentGrabberNodeDialog.getTokenizerModel();
+    private final SettingsModelString m_tokenizerModel = DocumentGrabberNodeDialog.getTokenizerModel();
 
     private DocumentDataTableBuilder m_dtBuilder = new DocumentDataTableBuilder(m_tokenizerModel.getStringValue());
 
@@ -168,9 +169,9 @@ public class DocumentGrabberNodeModel extends NodeModel {
         return new DataTableSpec[]{createColumnRearranger(m_dtBuilder.createDataTableSpec()).createSpec()};
     }
 
-    private ColumnRearranger createColumnRearranger(final DataTableSpec dataSpec) throws InvalidSettingsException {
+    private ColumnRearranger createColumnRearranger(final DataTableSpec dataSpec) {
 
-        ColumnRearranger cR = new ColumnRearranger(dataSpec);
+        final ColumnRearranger cR = new ColumnRearranger(dataSpec);
         if (m_appendQueryColumnModel.getBooleanValue()) {
             cR.append(new QueryStringCellFactory(QUERYCOL_NAME, m_queryModel.getStringValue()));
         }
@@ -183,19 +184,20 @@ public class DocumentGrabberNodeModel extends NodeModel {
     @Override
     protected BufferedDataTable[] execute(final BufferedDataTable[] inData, final ExecutionContext exec)
         throws Exception {
-        DocumentGrabber grabber = DocumentGrabberFactory.getInstance().getGrabber(m_dataBaseModel.getStringValue());
+        final DocumentGrabber grabber =
+            DocumentGrabberFactory.getInstance().getGrabber(m_dataBaseModel.getStringValue());
 
         try {
             m_dtBuilder.openDataTable(exec);
 
             if (grabber != null) {
-                String queryStr = m_queryModel.getStringValue();
-                Query query = new Query(queryStr, m_maxResultsModel.getIntValue());
+                final String queryStr = m_queryModel.getStringValue();
+                final Query query = new Query(queryStr, m_maxResultsModel.getIntValue());
 
                 if (grabber instanceof AbstractDocumentGrabber) {
-                    boolean delete = m_deleteFilesModel.getBooleanValue();
+                    final boolean delete = m_deleteFilesModel.getBooleanValue();
                     if (!m_categoryModel.getStringValue().isEmpty()) {
-                        DocumentCategory cat = new DocumentCategory(m_categoryModel.getStringValue());
+                        final DocumentCategory cat = new DocumentCategory(m_categoryModel.getStringValue());
                         ((AbstractDocumentGrabber)grabber).setDocumentCategory(cat);
                     }
                     ((AbstractDocumentGrabber)grabber).setDeleteFiles(delete);
@@ -207,12 +209,12 @@ public class DocumentGrabberNodeModel extends NodeModel {
 
                 grabber.removeAllDocumentParsedListener();
                 grabber.addDocumentParsedListener(new InternalDocumentParsedEventListener());
-                grabber.fetchAndParseDocuments(FileCollector2.getURL(m_directoryModel.getStringValue(), true), query);
+                grabber.fetchAndParseDocuments(UrlFileUtil.getURL(m_directoryModel.getStringValue(), true), query);
             }
 
             BufferedDataTable docTable = m_dtBuilder.getAndCloseDataTable();
             if (m_appendQueryColumnModel.getBooleanValue()) {
-                ColumnRearranger cR = createColumnRearranger(docTable.getDataTableSpec());
+                final ColumnRearranger cR = createColumnRearranger(docTable.getDataTableSpec());
                 docTable = exec.createColumnRearrangeTable(docTable, cR, exec);
             }
 
@@ -224,7 +226,7 @@ public class DocumentGrabberNodeModel extends NodeModel {
 
     static final void checkDir(final String dir) throws InvalidSettingsException {
         try {
-            File localPath = FileUtil.getFileFromURL(FileCollector2.getURL(dir, true));
+            final File localPath = FileUtil.getFileFromURL(UrlFileUtil.getURL(dir, true));
             // additional check
             if (localPath != null) {
                 if (!localPath.canWrite()) {
@@ -233,11 +235,11 @@ public class DocumentGrabberNodeModel extends NodeModel {
                     throw new InvalidSettingsException("Selected directory: " + dir + " is not empty!");
                 }
             } else {
-                if (!FileCollector2.listFiles(dir, new ArrayList<String>(), true, true).isEmpty()) {
+                if (!UrlFileUtil.listFiles(dir, true, true).isEmpty()) {
                     throw new InvalidSettingsException("Selected directory: " + dir + " is not empty!");
                 }
             }
-        } catch (InvalidPathException e) {
+        } catch (InvalidPathException | IOException | URISyntaxException e) {
             throw new InvalidSettingsException("Invalid directory path!");
         }
     }
@@ -249,7 +251,7 @@ public class DocumentGrabberNodeModel extends NodeModel {
         @Override
         public void documentParsed(final DocumentParsedEvent event) {
             if (m_dtBuilder != null) {
-                Document d = event.getDocument();
+                final Document d = event.getDocument();
                 if (d != null) {
                     m_dtBuilder.addDocument(d);
                 }
@@ -264,7 +266,7 @@ public class DocumentGrabberNodeModel extends NodeModel {
     protected void reset() {
         try {
             m_dtBuilder.getAndCloseDataTable();
-        } catch (Exception e) {
+        } catch (final Exception e) {
             /* Do noting just try */ }
     }
 
@@ -356,7 +358,7 @@ public class DocumentGrabberNodeModel extends NodeModel {
 
     private class QueryStringCellFactory extends AbstractCellFactory {
 
-        private String m_query;
+        private final String m_query;
 
         QueryStringCellFactory(final String queryColName, final String query) {
             super(new DataColumnSpecCreator(queryColName, StringCell.TYPE).createSpec());

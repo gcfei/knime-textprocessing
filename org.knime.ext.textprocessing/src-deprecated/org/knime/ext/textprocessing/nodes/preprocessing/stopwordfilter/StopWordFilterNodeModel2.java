@@ -70,7 +70,7 @@ import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.util.FileUtil;
 import org.knime.ext.textprocessing.nodes.preprocessing.StreamableFunctionPreprocessingNodeModel;
 import org.knime.ext.textprocessing.nodes.preprocessing.TermPreprocessing;
-import org.knime.ext.textprocessing.nodes.source.parser.FileCollector2;
+import org.knime.ext.textprocessing.util.UrlFileUtil;
 
 /**
  *
@@ -134,11 +134,12 @@ public final class StopWordFilterNodeModel2 extends StreamableFunctionPreprocess
     @Override
     protected void internalConfigure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
         if (!m_useBuildinListModel.getBooleanValue()) {
-            FileCollector2.getURL(m_fileModel.getStringValue(), false);
-            /** TODO: previously, this used to throw an InvalideSettingsException "Selected stop word file XYZ cannot be
-             * accessed!", Now, it doesn't. That could mess up our testflows, since they sometimes expect certain
-             * log messages. Ideally, try and make sure that you log the same errors as before. This is true not only
-             * here, but everywhere in this PR where you changed the messages of thrown InvalidSettingsExceptions. */
+            final String fileName = m_fileModel.getStringValue();
+            try {
+                UrlFileUtil.getURL(fileName, false);
+            } catch (final IOException e) {
+                throw new InvalidSettingsException("Selected stop word file: " + fileName + " cannot be accessed!");
+            }
         }
     }
 
@@ -150,16 +151,14 @@ public final class StopWordFilterNodeModel2 extends StreamableFunctionPreprocess
         if (!m_useBuildinListModel.getBooleanValue()) {
             m_stopWords = new HashSet<String>();
             try {
-                URL url = FileCollector2.getURL(m_fileModel.getStringValue(), false);
-                BufferedReader reader = new BufferedReader(new InputStreamReader(FileUtil.openStreamWithTimeout(url)));
-                /**
-                 * TODO: I'm getting a warning here. You should use try-with-resources here to get rid of that warning.
-                 */
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    m_stopWords.add(line.trim());
+                URL url = UrlFileUtil.getURL(m_fileModel.getStringValue(), false);
+                try (InputStreamReader is = new InputStreamReader(FileUtil.openStreamWithTimeout(url));
+                        BufferedReader reader = new BufferedReader(is)) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        m_stopWords.add(line.trim());
+                    }
                 }
-                reader.close();
             } catch (FileNotFoundException e) {
                 LOGGER.warn("Not such stop word file.");
                 throw new InvalidSettingsException(

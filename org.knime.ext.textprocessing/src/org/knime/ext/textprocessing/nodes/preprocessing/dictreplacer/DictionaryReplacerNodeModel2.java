@@ -65,10 +65,10 @@ import org.knime.core.node.defaultnodesettings.SettingsModelOptionalString;
 import org.knime.core.node.defaultnodesettings.SettingsModelString;
 import org.knime.ext.textprocessing.nodes.preprocessing.StreamableFunctionPreprocessingNodeModel;
 import org.knime.ext.textprocessing.nodes.preprocessing.TermPreprocessing;
-import org.knime.ext.textprocessing.nodes.source.parser.FileCollector2;
 import org.knime.ext.textprocessing.nodes.tokenization.MissingTokenizerException;
 import org.knime.ext.textprocessing.nodes.tokenization.TokenizerFactoryRegistry;
 import org.knime.ext.textprocessing.util.DataTableSpecVerifier;
+import org.knime.ext.textprocessing.util.UrlFileUtil;
 
 /**
  * The {@code NodeModel} for the file-based Dictionary Replacer node.
@@ -85,7 +85,7 @@ public final class DictionaryReplacerNodeModel2 extends StreamableFunctionPrepro
     public static final String DEF_DICTFILE = System.getProperty("user.home");
 
     /** The default valid dictionary file extensions (txt). */
-    public static final String[] VALID_DICTFILE_EXTENIONS = new String[]{"txt"};
+    protected static final String[] VALID_DICTFILE_EXTENIONS = new String[]{"txt"};
 
     /** The default separator. */
     public static final String DEFAULT_SEPARATOR = ",";
@@ -143,7 +143,11 @@ public final class DictionaryReplacerNodeModel2 extends StreamableFunctionPrepro
             setWarningMessage(dataTableSpecVerifier.getTokenizerWarningMsg());
         }
         // check file path
-        FileCollector2.getURL(m_fileModel.getStringValue(), false);
+        try {
+            UrlFileUtil.getURL(m_fileModel.getStringValue(), false);
+        } catch (final IOException e) {
+            throw new InvalidSettingsException(e.getMessage());
+        }
     }
 
     /**

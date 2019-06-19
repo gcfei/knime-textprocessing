@@ -65,14 +65,19 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+import javax.xml.parsers.ParserConfigurationException;
+
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.node.util.CheckUtils;
 import org.knime.core.util.FileUtil;
 import org.knime.ext.textprocessing.data.Document;
 import org.knime.ext.textprocessing.data.DocumentSource;
@@ -80,8 +85,9 @@ import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEvent;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParser;
 import org.knime.ext.textprocessing.nodes.source.parser.FileCollector;
-import org.knime.ext.textprocessing.nodes.source.parser.FileCollector2;
 import org.knime.ext.textprocessing.nodes.source.parser.pubmed.PubMedDocumentParser;
+import org.knime.ext.textprocessing.util.UrlFileUtil;
+import org.xml.sax.SAXException;
 
 /**
  *
@@ -120,7 +126,7 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
 
     private long m_delayMillis = 1000;
 
-    private List<Integer> m_idList = new ArrayList<Integer>();
+    private final List<Integer> m_idList = new ArrayList<>();
 
     private File m_tempDir;
 
@@ -146,7 +152,7 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
      */
     @Override
     public int numberOfResults(final Query query) throws Exception {
-        URL pubmed = buildUrl(query, false);
+        final URL pubmed = buildUrl(query, false);
         LOGGER.info("PubMed Query: " + pubmed.toString());
         return buildResultList(pubmed);
     }
@@ -157,22 +163,18 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
     @Override
     @Deprecated
     public List<Document> grabDocuments(final File directory, final Query query) throws Exception {
-        if (directory != null && query != null) {
+        if ((directory != null) && (query != null)) {
             if (directory.exists() && directory.isDirectory()) {
 
                 fetchDocuments(directory, query);
 
-                List<Document> docs = new ArrayList<Document>();
+                List<Document> docs = new ArrayList<>();
                 try {
                     docs = parseDocuments(directory);
-                } catch (URISyntaxException e) {
-                    LOGGER.warn("Could not find file containing " + "PubMed documents!");
-                    /**
-                     * TODO: if you auto-format existing code (which you don't have to), make sure that you fix changes
-                     * like this, where the '+' is not required any more.
-                     */
+                } catch (final URISyntaxException e) {
+                    LOGGER.warn("Could not find file containing PubMed documents!");
                     throw (e);
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     LOGGER.warn("Could not parse PubMed documents!");
                     throw (e);
                 }
@@ -191,117 +193,88 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
     @Deprecated
     @Override
     public void fetchAndParseDocuments(final File directory, final Query query) throws Exception {
-        if (directory != null && query != null) {
+        if ((directory != null) && (query != null)) {
             if (directory.exists() && directory.isDirectory()) {
 
                 fetchDocuments(directory, query);
 
                 try {
                     parseDocumentsAndNotify(directory);
-                } catch (URISyntaxException e) {
-                    LOGGER.warn("Could not find file containing " + "PubMed documents!");
+                } catch (final URISyntaxException e) {
+                    LOGGER.warn("Could not find file containing PubMed documents!");
                     throw (e);
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     LOGGER.warn("Could not parse PubMed documents!");
                     throw (e);
                 }
             }
         }
-        return;
     }
 
-    /**
-     * {@inheritDoc}
-     *
-     * @since 3.5
-     */
     @Override
-    public void fetchAndParseDocuments(final URL directory, final Query query) throws Exception {
-        /**
-         * TODO: Instead of checking that both params are not null (and not complaining if they are null), you should
-         * check if these arguments are null and, if so, throw an unchecked exception. The reason for this is that
-         * you want your exception to be thrown as early as possible when something is wrong. You can to this
-         * with CheckUtils.checkArgumentNotNull.
-         */
-        if (directory != null && query != null) {
-            fetchDocuments(directory, query);
-
-            try {
-                parseDocumentsAndNotify(directory);
-            } catch (URISyntaxException e) {
-                LOGGER.warn("Could not find file containing " + "PubMed documents!");
-                throw (e);
-            } catch (Exception e) {
-                LOGGER.warn("Could not parse PubMed documents!");
-                throw (e);
-            }
+    public void fetchAndParseDocuments(final URL directory, final Query query)
+            throws IOException, CanceledExecutionException, URISyntaxException, InterruptedException,
+            ParserConfigurationException, SAXException {
+        CheckUtils.checkArgumentNotNull(directory);
+        CheckUtils.checkArgumentNotNull(query);
+        fetchDocuments(directory, query);
+        try {
+            parseDocumentsAndNotify(directory);
+        } catch (final URISyntaxException e) {
+            LOGGER.warn("Could not find file containing PubMed documents!");
+            throw (e);
+        } catch (final IOException e) {
+            LOGGER.warn("Could not resolve url.");
+            throw (e);
+        } catch (final CanceledExecutionException e) {
+            LOGGER.warn("Execution has been canceled.");
+            throw (e);
+        } catch (final ParserConfigurationException e) {
+            LOGGER.warn("SAXParser could not be instantiated.");
+            throw (e);
         }
-        return;
     }
 
     @Deprecated
     private void fetchDocuments(final File directory, final Query query) throws Exception {
-        if (directory != null && query != null) {
-            if (directory.exists() && directory.isDirectory()) {
+        if ((directory != null) && (query != null) && directory.exists() && directory.isDirectory()) {
 
-                URL pubmed = buildUrl(query, true);
-                LOGGER.info("PubMed Query: " + pubmed.toString());
+            URL pubmed = buildUrl(query, true);
+            LOGGER.info("PubMed Query: " + pubmed.toString());
 
-                // Read search result xml
-                buildResultList(pubmed);
+            // Read search result xml
+            buildResultList(pubmed);
 
-                // go through all ids (with certain step size)
-                // and download document
-                int idStart = 0;
-                int count = 1;
-                while (idStart < m_idList.size()) {
-                    checkCanceled();
-                    int idEnd = getEnd(idStart, m_idList.size() - 1);
+            // go through all ids (with certain step size)
+            // and download document
+            int idStart = 0;
+            int count = 1;
+            while (idStart < m_idList.size()) {
+                checkCanceled();
+                final int idEnd = getEnd(idStart, m_idList.size() - 1);
 
-                    // setting progress
-                    double progress = (double)idEnd / (double)m_idList.size() * 0.5;
-                    message("Fetching documents from " + idStart + " to " + idEnd + " of " + m_idList.size(), progress);
+                pubmed = buildQueryUrl(idStart, idEnd);
 
-                    String idString = "";
-                    for (int i = idStart; i <= idEnd; i++) {
-                        idString += m_idList.get(i) + ",";
-                    }
+                LOGGER.info("PubMed fetching: " + pubmed.toString());
 
-                    String fetchStr = FETCH_QUERY + idString + FETCH_QUERY_POSTFIX;
-                    URI uri = new URI(PROTOCOL, HOST, FETCH_PATH, fetchStr, "");
-                    pubmed = uri.toURL();
-
-                    LOGGER.info("PubMed fetching: " + pubmed.toString());
-
-                    String filename = BASIC_FILE_NAME + count + "." + FILE_EXTENSION;
-                    try {
-                        saveDocument(pubmed, directory, filename);
-                    } catch (IOException e) {
-                        LOGGER.warn("Could not read PubMed Xml-Website!");
-                        throw (e);
-                    } catch (URISyntaxException e) {
-                        LOGGER.warn("URL Syntax is not valid!");
-                        throw (e);
-                    }
-
-                    Thread.sleep(m_delayMillis);
-                    idStart = idEnd + 1;
-                    count++;
+                final String filename = BASIC_FILE_NAME + count + "." + FILE_EXTENSION;
+                try {
+                    saveDocument(pubmed, directory, filename);
+                } catch (final IOException e) {
+                    LOGGER.warn("Could not read PubMed Xml-Website!");
+                    throw (e);
                 }
+
+                Thread.sleep(m_delayMillis);
+                idStart = idEnd + 1;
+                count++;
             }
         }
-        return;
     }
 
-    private void fetchDocuments(final URL directory, final Query query) throws Exception {
-        /**
-         * TODO: between this method and the overloaded fetchDocuments(final File directory, final Query query), there
-         * is a lot of duplicate code. Duplicate code is never a good thing, since it bloats up our code base. Also,
-         * if we fix some bug in one of the two duplicates in the future, we might miss the other. Therefore, I'd
-         * suggest refactoring duplicate code into a private method such that both methods can use it
-         * (the same is true for the other methods that were deprecated in this class).
-         */
-        if (directory != null && query != null) {
+    private void fetchDocuments(final URL directory, final Query query)
+            throws IOException, CanceledExecutionException, URISyntaxException, InterruptedException {
+        if ((directory != null) && (query != null)) {
 
             URL pubmed = buildUrl(query, true);
             LOGGER.info("PubMed Query: " + pubmed.toString());
@@ -312,7 +285,7 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
             URL dirURL = directory;
             // if the dir is remote and files should be deleted after parsing
             // store the files in a local temp dir instead, and delete after parsing
-            if (getDeleteFiles() && FileUtil.resolveToPath(directory) == null) {
+            if (getDeleteFiles() && (FileUtil.resolveToPath(directory) == null)) {
                 m_tempDir = FileUtil.createTempDir("pubmed_doc_grabber", null, false);
                 dirURL = FileUtil.toURL(m_tempDir.getAbsolutePath());
             }
@@ -323,156 +296,147 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
             int count = 1;
             while (idStart < m_idList.size()) {
                 checkCanceled();
-                int idEnd = getEnd(idStart, m_idList.size() - 1);
-
-                // setting progress
-                double progress = (double)idEnd / (double)m_idList.size() * 0.5;
-                message("Fetching documents from " + idStart + " to " + idEnd + " of " + m_idList.size(), progress);
-
-                String idString = "";
-                for (int i = idStart; i <= idEnd; i++) {
-                    idString += m_idList.get(i) + ",";
-                }
-
-                String fetchStr = FETCH_QUERY + idString + FETCH_QUERY_POSTFIX;
-                URI uri = new URI(PROTOCOL, HOST, FETCH_PATH, fetchStr, "");
-                pubmed = uri.toURL();
-
+                final int idEnd = getEnd(idStart, m_idList.size() - 1);
+                pubmed = buildQueryUrl(idStart, idEnd);
                 LOGGER.info("PubMed fetching: " + pubmed.toString());
-
-                String filename = BASIC_FILE_NAME + count + "." + FILE_EXTENSION;
+                final String filename = BASIC_FILE_NAME + count + "." + FILE_EXTENSION;
                 try {
                     saveDocument(pubmed, dirURL, filename);
-                } catch (IOException e) {
+                } catch (final IOException e) {
                     LOGGER.warn("Could not read PubMed Xml-Website!");
                     throw (e);
-                } catch (URISyntaxException e) {
+                } catch (final URISyntaxException e) {
                     LOGGER.warn("URL Syntax is not valid!");
                     throw (e);
                 }
-
                 Thread.sleep(m_delayMillis);
                 idStart = idEnd + 1;
                 count++;
             }
         }
-        return;
+    }
+
+    private URL buildQueryUrl(final int idStart, final int idEnd) throws URISyntaxException, MalformedURLException {
+        URL pubmed;
+        // setting progress
+        final double progress = ((double)idEnd / (double)m_idList.size()) * 0.5;
+        message("Fetching documents from " + idStart + " to " + idEnd + " of " + m_idList.size(), progress);
+
+        final StringBuilder idString = new StringBuilder();
+        for (int i = idStart; i <= idEnd; i++) {
+            idString.append(m_idList.get(i));
+            idString.append(",");
+        }
+
+        final String fetchStr = FETCH_QUERY + idString.toString() + FETCH_QUERY_POSTFIX;
+        final URI uri = new URI(PROTOCOL, HOST, FETCH_PATH, fetchStr, "");
+        pubmed = uri.toURL();
+        return pubmed;
     }
 
     @Deprecated
     private void parseDocumentsAndNotify(final File dir) throws Exception {
 
-        DocumentParser parser = new PubMedDocumentParser(getExtractMetaInfo(), getTokenizerName());
+        final DocumentParser parser = getDocumentParser();
 
-        parser.addDocumentParsedListener(new InternalDocumentParsedEventListener());
-
-        parser.setDocumentSource(new DocumentSource(SOURCE));
-        if (getDocumentCategory() != null) {
-            parser.setDocumentCategory(getDocumentCategory());
-        }
-        if (getDocumentType() != null) {
-            parser.setDocumentType(getDocumentType());
-        }
-
-        List<String> validExtensions = new ArrayList<String>();
+        final List<String> validExtensions = new ArrayList<>();
         validExtensions.add(FILE_EXTENSION);
 
-        FileCollector fc = new FileCollector(dir, validExtensions, false, true);
-        List<File> files = fc.getFiles();
-        int fileCount = files.size();
+        final FileCollector fc = new FileCollector(dir, validExtensions, false, true);
+        final List<File> files = fc.getFiles();
+        final int fileCount = files.size();
         int currFile = 1;
-        for (File f : files) {
-            double progress = (double)currFile / (double)fileCount;
+        for (final File f : files) {
+            final double progress = (double)currFile / (double)fileCount;
             setProgress(progress, "Parsing file " + currFile + " of " + fileCount);
             checkCanceled();
             currFile++;
             LOGGER.info("Parsing file: " + f.getAbsolutePath());
-
-            InputStream is;
-            if (f.getName().toLowerCase().endsWith(".gz") || f.getName().toLowerCase().endsWith(".zip")) {
-                is = new GZIPInputStream(new FileInputStream(f));
-            } else {
-                is = new FileInputStream(f);
+            final boolean compressed =
+                    f.getName().toLowerCase().endsWith(".gz") || f.getName().toLowerCase().endsWith(".zip");
+            try (final InputStream is =
+                    compressed ? new GZIPInputStream(new FileInputStream(f)) : new FileInputStream(f)) {
+                parser.setDocumentFilepath(f.getAbsolutePath());
+                parser.parseDocument(is);
             }
-            parser.setDocumentFilepath(f.getAbsolutePath());
-            parser.parseDocument(is);
         }
 
         if (getDeleteFiles()) {
-            for (File file : files) {
+            for (final File file : files) {
                 if (file.isFile() && file.exists()) {
-                    file.delete();
+                    Files.delete(file.toPath());
                 }
             }
         }
-        return;
     }
 
-    private void parseDocumentsAndNotify(final URL dir) throws Exception {
+    private void parseDocumentsAndNotify(final URL dir)
+            throws CanceledExecutionException, IOException, URISyntaxException, SAXException, ParserConfigurationException {
 
-        DocumentParser parser = new PubMedDocumentParser(getExtractMetaInfo(), getTokenizerName());
+        final PubMedDocumentParser parser = getDocumentParser();
 
-        parser.addDocumentParsedListener(new InternalDocumentParsedEventListener());
-
-        parser.setDocumentSource(new DocumentSource(SOURCE));
-        if (getDocumentCategory() != null) {
-            parser.setDocumentCategory(getDocumentCategory());
-        }
-        if (getDocumentType() != null) {
-            parser.setDocumentType(getDocumentType());
-        }
-
-        List<String> validExtensions = new ArrayList<String>();
+        final Set<String> validExtensions = new HashSet<>();
         validExtensions.add(FILE_EXTENSION);
 
-        List<URL> files =
-            FileCollector2.listFiles(FileCollector2.getStringRepresentation(dir), validExtensions, false, true);
-        int fileCount = files.size();
+        final List<URL> files = UrlFileUtil.listFiles(UrlFileUtil.getStringRepresentation(dir), validExtensions, false, true);
+        final int fileCount = files.size();
         int currFile = 1;
-        for (URL f : files) {
-            String filename = FileCollector2.getStringRepresentation(f);
-            double progress = (double)currFile / (double)fileCount;
+        for (final URL f : files) {
+            final String filename = UrlFileUtil.getStringRepresentation(f);
+            final double progress = (double)currFile / (double)fileCount;
             setProgress(progress, "Parsing file " + currFile + " of " + fileCount);
             checkCanceled();
             currFile++;
             LOGGER.info("Parsing file: " + filename);
-
-            InputStream is;
-            if (filename.toLowerCase().endsWith(".gz") || filename.toLowerCase().endsWith(".zip")) {
-                is = new GZIPInputStream(FileUtil.openStreamWithTimeout(f));
-            } else {
-                is = FileUtil.openStreamWithTimeout(f);
+            final boolean compressed =
+                    filename.toLowerCase().endsWith(".gz") || filename.toLowerCase().endsWith(".zip");
+            try (final InputStream is = compressed ? new GZIPInputStream(FileUtil.openStreamWithTimeout(f))
+                : FileUtil.openStreamWithTimeout(f)) {
+                parser.setDocumentFilepath(filename);
+                parser.parseDocument(is);
             }
-            parser.setDocumentFilepath(filename);
-            parser.parseDocument(is);
         }
 
         if (getDeleteFiles()) {
-            for (URL file : files) {
-                Path localPath = FileUtil.resolveToPath(file);
+            for (final URL file : files) {
+                final Path localPath = FileUtil.resolveToPath(file);
                 if (localPath != null) {
                     try {
                         Files.delete(localPath);
-                    } catch (IOException ex) {
-                        LOGGER.warn("Unable to delete file '" + FileCollector2.getStringRepresentation(file));
+                    } catch (final IOException ex) {
+                        LOGGER.warn("Unable to delete file '" + UrlFileUtil.getStringRepresentation(file));
                     }
                 } else {
                     // if delete files flag is true and file is remote, it means a temp dir has been
                     // created to store the files -> delete the temp dir
-                    if (m_tempDir != null && !FileUtil.deleteRecursively(m_tempDir)) {
+                    if ((m_tempDir != null) && !FileUtil.deleteRecursively(m_tempDir)) {
                         LOGGER.warn("Unable to delete temp dir " + m_tempDir.getAbsolutePath());
                     }
                 }
             }
         }
-        return;
+    }
+
+    private PubMedDocumentParser getDocumentParser() {
+        final PubMedDocumentParser parser = new PubMedDocumentParser(getExtractMetaInfo(), getTokenizerName());
+
+        parser.addDocumentParsedListener(new InternalDocumentParsedEventListener());
+
+        parser.setDocumentSource(new DocumentSource(SOURCE));
+        if (getDocumentCategory() != null) {
+            parser.setDocumentCategory(getDocumentCategory());
+        }
+        if (getDocumentType() != null) {
+            parser.setDocumentType(getDocumentType());
+        }
+        return parser;
     }
 
     @Deprecated
     private List<Document> parseDocuments(final File dir) throws Exception {
-        List<Document> docs = new ArrayList<Document>();
+        final List<Document> docs = new ArrayList<>();
 
-        DocumentParser parser = new PubMedDocumentParser(getTokenizerName());
+        final DocumentParser parser = new PubMedDocumentParser(getTokenizerName());
         parser.setDocumentSource(new DocumentSource(SOURCE));
         if (getDocumentCategory() != null) {
             parser.setDocumentCategory(getDocumentCategory());
@@ -481,36 +445,33 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
             parser.setDocumentType(getDocumentType());
         }
 
-        List<String> validExtensions = new ArrayList<String>();
+        final List<String> validExtensions = new ArrayList<>();
         validExtensions.add(FILE_EXTENSION);
 
-        FileCollector fc = new FileCollector(dir, validExtensions, false, true);
-        List<File> files = fc.getFiles();
-        int fileCount = files.size();
+        final FileCollector fc = new FileCollector(dir, validExtensions, false, true);
+        final List<File> files = fc.getFiles();
+        final int fileCount = files.size();
         int currFile = 1;
-        for (File f : files) {
-            double progress = (double)currFile / (double)fileCount;
+        for (final File f : files) {
+            final double progress = (double)currFile / (double)fileCount;
             setProgress(progress, "Parsing file " + currFile + " of " + fileCount);
             checkCanceled();
             currFile++;
             LOGGER.info("Parsing file: " + f.getAbsolutePath());
 
-            InputStream is;
-            if (f.getName().toLowerCase().endsWith(".gz") || f.getName().toLowerCase().endsWith(".zip")) {
-                is = new GZIPInputStream(new FileInputStream(f));
-            } else {
-                is = new FileInputStream(f);
+            try (final InputStream is =
+                    (f.getName().toLowerCase().endsWith(".gz") || f.getName().toLowerCase().endsWith(".zip"))
+                    ? new GZIPInputStream(new FileInputStream(f)) : new FileInputStream(f)) {
+                parser.setDocumentFilepath(f.getAbsolutePath());
+                docs.addAll(parser.parse(is));
             }
-            parser.setDocumentFilepath(f.getAbsolutePath());
-
-            docs.addAll(parser.parse(is));
             parser.clean();
         }
 
         if (getDeleteFiles()) {
-            for (File file : files) {
+            for (final File file : files) {
                 if (file.isFile() && file.exists()) {
-                    file.delete();
+                    Files.delete(file.toPath());
                 }
             }
         }
@@ -519,97 +480,60 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
     }
 
     @Deprecated
-    private void saveDocument(final URL url, final File dir, final String filename)
-        throws IOException, URISyntaxException {
+    private static void saveDocument(final URL url, final File dir, final String filename)
+            throws IOException {
 
-        File dst = new File(dir.getAbsolutePath() + "/" + filename);
+        final File dst = new File(dir.getAbsolutePath() + "/" + filename);
         if (!dst.exists()) {
             dst.createNewFile();
         }
-
-        URLConnection conn = url.openConnection();
-        conn.setConnectTimeout(60000);
-        try {
-            conn.connect();
-        } catch (SocketTimeoutException e) {
-            LOGGER.error("Timeout! Connection could not be established.");
-            throw e;
-        } catch (IOException e) {
-            LOGGER.error("Connection could not be opened.");
-            throw e;
+        try (final FileOutputStream fos = new FileOutputStream(dst)) {
+            saveDocument(url, fos);
         }
-        InputStreamReader isr = new InputStreamReader(conn.getInputStream(), "UTF-8");
-        BufferedReader in = new BufferedReader(isr);
-        OutputStream out = new GZIPOutputStream(new FileOutputStream(dst));
-        OutputStreamWriter writer = new OutputStreamWriter(out, "UTF-8");
-
-        // Transfer bytes from in to out
-        try {
-            String line;
-            while ((line = in.readLine()) != null) {
-                writer.write(line);
-            }
-        } catch (IOException e) {
-            LOGGER.error("Documents could not be downloaded.");
-            writer.close();
-            throw e;
-        }
-
-        in.close();
-        writer.close();
-        out.close();
     }
 
-    private void saveDocument(final URL url, final URL dir, final String filename)
-        throws IOException, URISyntaxException {
-        /**
-         * TODO: I'm getting many warnings in this class, such as "this method can be declared as static" or
-         * "potential resource leak, this resource should be managed with try-with-resources". Can you address these
-         * warnings please?
-         */
-
+    private static void saveDocument(final URL url, final URL dir, final String filename)
+            throws IOException, URISyntaxException {
         // assume the dir is empty
-        URL outUrl = FileUtil.toURL(FileCollector2.getStringRepresentation(dir) + "/" + filename);
-        Path localPath = FileUtil.resolveToPath(outUrl);
-        OutputStream tempOut;
-        if (localPath != null) {
-            tempOut = Files.newOutputStream(localPath);
-        } else {
-            URLConnection urlConnection = FileUtil.openOutputConnection(outUrl, "PUT");
-            tempOut = urlConnection.getOutputStream();
+        final URL outUrl = FileUtil.toURL(UrlFileUtil.getStringRepresentation(dir) + "/" + filename);
+        final Path localPath = FileUtil.resolveToPath(outUrl);
+        final boolean isLocalPath = localPath != null;
+        URLConnection urlConnection = null;
+        if (!isLocalPath) {
+            urlConnection = FileUtil.openOutputConnection(outUrl, "PUT");
         }
+        try (final OutputStream tempOut = !isLocalPath && (urlConnection != null) ? urlConnection.getOutputStream()
+            : Files.newOutputStream(localPath)) {
+            saveDocument(url, tempOut);
+        }
+    }
 
-        URLConnection conn = url.openConnection();
+    private static void saveDocument(final URL url, final OutputStream tempOut) throws IOException {
+        final URLConnection conn = url.openConnection();
         conn.setConnectTimeout(60000);
         try {
             conn.connect();
-        } catch (SocketTimeoutException e) {
+        } catch (final SocketTimeoutException e) {
             LOGGER.error("Timeout! Connection could not be established.");
             throw e;
-        } catch (IOException e) {
+        } catch (final IOException e) {
             LOGGER.error("Connection could not be opened.");
             throw e;
         }
-        InputStreamReader isr = new InputStreamReader(conn.getInputStream(), "UTF-8");
-        BufferedReader in = new BufferedReader(isr);
-        OutputStream out = new GZIPOutputStream(tempOut);
-        OutputStreamWriter writer = new OutputStreamWriter(out, "UTF-8");
+        final InputStreamReader isr = new InputStreamReader(conn.getInputStream(), "UTF-8");
 
         // Transfer bytes from in to out
-        try {
+        try (BufferedReader in = new BufferedReader(isr);
+                OutputStream out = new GZIPOutputStream(tempOut);
+                OutputStreamWriter writer = new OutputStreamWriter(out, "UTF-8")) {
             String line;
             while ((line = in.readLine()) != null) {
                 writer.write(line);
             }
-        } catch (IOException e) {
+        } catch (final IOException e) {
             LOGGER.error("Documents could not be downloaded.");
-            writer.close();
             throw e;
         }
-
-        in.close();
-        writer.close();
-        out.close();
     }
 
     private int getEnd(final int start, final int max) {
@@ -626,15 +550,15 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
         }
     }
 
-    private URL buildUrl(final Query query, final boolean applyMaxResults)
-        throws URISyntaxException, MalformedURLException {
+    private static URL buildUrl(final Query query, final boolean applyMaxResults)
+            throws URISyntaxException, MalformedURLException {
 
         // Build search url
         String str = SEARCH_QUERY + query.getQuery();
         if (applyMaxResults) {
             str += SEARCH_QUERY_POSTFIX + query.getMaxResults();
         }
-        URI uri = new URI(PROTOCOL, HOST, SEARCH_PATH, str, "");
+        final URI uri = new URI(PROTOCOL, HOST, SEARCH_PATH, str, "");
 
         return uri.toURL();
     }
@@ -642,36 +566,37 @@ public class PubMedDocumentGrabber extends AbstractDocumentGrabber {
     private int buildResultList(final URL url) throws IOException, CanceledExecutionException {
         // Read search result xml
         int results = -1;
-        BufferedReader r = new BufferedReader(new InputStreamReader(url.openStream()));
-        m_idList.clear();
-        String line = null;
-        while ((line = r.readLine()) != null) {
-            checkCanceled();
+        try (InputStreamReader isr = new InputStreamReader(url.openStream());
+                BufferedReader r = new BufferedReader(isr)) {
+            m_idList.clear();
+            String line = null;
+            while ((line = r.readLine()) != null) {
+                checkCanceled();
 
-            // regular expression to find the "id" field
-            String regex = "<Id>(\\d+)</Id>";
-            Pattern p = Pattern.compile(regex);
-            Matcher m = p.matcher(line);
+                // regular expression to find the "id" field
+                final String regex = "<Id>(\\d+)</Id>";
+                Pattern p = Pattern.compile(regex);
+                Matcher m = p.matcher(line);
 
-            // find id sequences in search result
-            if (m.find()) {
-                int id = Integer.parseInt(m.group(1));
-                m_idList.add(id);
-            }
-
-            if (results == -1) {
-                // regular expression to find the "count" field
-                String regexCount = "<Count>(\\d+)</Count>";
-                p = Pattern.compile(regexCount);
-                m = p.matcher(line);
-
-                // find count sequences in search result
+                // find id sequences in search result
                 if (m.find()) {
-                    results = Integer.parseInt(m.group(1));
+                    final int id = Integer.parseInt(m.group(1));
+                    m_idList.add(id);
+                }
+
+                if (results == -1) {
+                    // regular expression to find the "count" field
+                    final String regexCount = "<Count>(\\d+)</Count>";
+                    p = Pattern.compile(regexCount);
+                    m = p.matcher(line);
+
+                    // find count sequences in search result
+                    if (m.find()) {
+                        results = Integer.parseInt(m.group(1));
+                    }
                 }
             }
         }
-
         return results;
     }
 

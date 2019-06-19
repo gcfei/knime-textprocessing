@@ -55,7 +55,9 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.GZIPInputStream;
@@ -82,6 +84,7 @@ import org.knime.ext.textprocessing.data.DocumentType;
 import org.knime.ext.textprocessing.nodes.tokenization.MissingTokenizerException;
 import org.knime.ext.textprocessing.nodes.tokenization.TokenizerFactoryRegistry;
 import org.knime.ext.textprocessing.util.DocumentDataTableBuilder;
+import org.knime.ext.textprocessing.util.UrlFileUtil;
 
 /**
  * The model for all {@link org.knime.ext.textprocessing.data.Document} parser nodes, no matter what format they parse.
@@ -90,10 +93,6 @@ import org.knime.ext.textprocessing.util.DocumentDataTableBuilder;
  * All files partitioned into several chunks of files. The chunks of files are then parsed concurrently the worker
  * threads of the KNIME thread pool. For each thread a new concrete {@link DocumentParser} instance is created using the
  * specified {@link DocumentParserFactory}.
- *
- * @author Kilian Thiel, University of Konstanz
- */
-/**
  *
  * @author Kilian Thiel, KNIME AG, Zurich, Switzerland
  */
@@ -135,36 +134,39 @@ public class DocumentParserNodeModel extends NodeModel {
      */
     public static final DocumentType DEFAULT_DOCTYPE = DocumentType.UNKNOWN;
 
-    /** The default setting to use the filepath as title
-     * @since 3.1*/
+    /**
+     * The default setting to use the filepath as title
+     *
+     * @since 3.1
+     */
     public static final boolean DEFAULT_FILENAME_TITLE = false;
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(DocumentParserNodeModel.class);
 
-    private SettingsModelString m_pathModel = DocumentParserNodeDialog.getPathModel();
+    private final SettingsModelString m_pathModel = DocumentParserNodeDialog.getPathModel();
 
-    private SettingsModelBoolean m_recursiveModel = DocumentParserNodeDialog.getRecursiveModel();
+    private final SettingsModelBoolean m_recursiveModel = DocumentParserNodeDialog.getRecursiveModel();
 
-    private SettingsModelString m_categoryModel = DocumentParserNodeDialog.getCategoryModel();
+    private final SettingsModelString m_categoryModel = DocumentParserNodeDialog.getCategoryModel();
 
-    private SettingsModelString m_sourceModel = DocumentParserNodeDialog.getSourceModel();
+    private final SettingsModelString m_sourceModel = DocumentParserNodeDialog.getSourceModel();
 
-    private SettingsModelString m_typeModel = DocumentParserNodeDialog.getTypeModel();
+    private final SettingsModelString m_typeModel = DocumentParserNodeDialog.getTypeModel();
 
-    private SettingsModelBoolean m_ignoreHiddenFilesModel = DocumentParserNodeDialog.getIgnoreHiddenFilesModel();
+    private final SettingsModelBoolean m_ignoreHiddenFilesModel = DocumentParserNodeDialog.getIgnoreHiddenFilesModel();
 
-    private SettingsModelString m_charsetModel = CharsetDocumentParserNodeDialog.getCharsetModel();
+    private final SettingsModelString m_charsetModel = CharsetDocumentParserNodeDialog.getCharsetModel();
 
-    private SettingsModelBoolean m_fileNameAsTitleModel =
+    private final SettingsModelBoolean m_fileNameAsTitleModel =
         FilepathTitleDocumentParserNodeDialog.getFileNameAsTitleModel();
 
-    private SettingsModelString m_tokenizerModel = DocumentParserNodeDialog.getTokenizerModel();
+    private final SettingsModelString m_tokenizerModel = DocumentParserNodeDialog.getTokenizerModel();
 
     private boolean m_withCharset = false;
 
     private final DocumentParserFactory m_parserFactory;
 
-    private final List<String> m_validExtensions;
+    private final Set<String> m_validExtensions;
 
     private DocumentDataTableBuilder m_dtBuilder = new DocumentDataTableBuilder(m_tokenizerModel.getStringValue());
 
@@ -184,7 +186,7 @@ public class DocumentParserNodeModel extends NodeModel {
         final String... validFileExtensions) {
         super(0, 1);
         m_parserFactory = parserFac;
-        m_validExtensions = Arrays.asList(validFileExtensions);
+        m_validExtensions = new HashSet<>(Arrays.asList(validFileExtensions));
         m_withCharset = withCharset;
     }
 
@@ -194,7 +196,11 @@ public class DocumentParserNodeModel extends NodeModel {
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
         // check selected directory
-        FileCollector2.getURL(m_pathModel.getStringValue(), true);
+        try {
+            UrlFileUtil.getURL(m_pathModel.getStringValue(), true);
+        } catch (final IOException e) {
+            throw new InvalidSettingsException(e.getMessage());
+        }
 
         // check if specific tokenizer is installed
         if (!TokenizerFactoryRegistry.getTokenizerFactoryMap().containsKey(m_tokenizerModel.getStringValue())) {
@@ -216,11 +222,11 @@ public class DocumentParserNodeModel extends NodeModel {
         final DocumentParser parser = m_parserFactory.createParser(m_tokenizerModel.getStringValue());
 
         final String category = m_categoryModel.getStringValue();
-        if (category != null && category.length() > 0) {
+        if ((category != null) && (category.length() > 0)) {
             parser.setDocumentCategory(new DocumentCategory(category));
         }
         final String source = m_sourceModel.getStringValue();
-        if (source != null && source.length() > 0) {
+        if ((source != null) && (source.length() > 0)) {
             parser.setDocumentSource(new DocumentSource(source));
         }
         final DocumentType type = DocumentType.valueOf(m_typeModel.getStringValue());
@@ -245,7 +251,7 @@ public class DocumentParserNodeModel extends NodeModel {
         final boolean recursive = m_recursiveModel.getBooleanValue();
         final boolean ignoreHiddenFiles = m_ignoreHiddenFilesModel.getBooleanValue();
 
-        final List<URL> files = FileCollector2.listFiles(dir, m_validExtensions, recursive, ignoreHiddenFiles);
+        final List<URL> files = UrlFileUtil.listFiles(dir, m_validExtensions, recursive, ignoreHiddenFiles);
         final int numberOfFiles = files.size();
 
         final int numberOfThreads = KNIMEConstants.GLOBAL_THREAD_POOL.getMaxThreads();
@@ -280,6 +286,7 @@ public class DocumentParserNodeModel extends NodeModel {
 
     /**
      * Creates and returns new anonymous {@link Runnable} instance that parses the given chunk of files.
+     *
      * @param files The files to parse.
      * @param exec The exection context.
      * @param semaphore Semaphore to accquire.
@@ -308,7 +315,7 @@ public class DocumentParserNodeModel extends NodeModel {
 
                         InputStream is = null;
                         try {
-                            String filepath = FileCollector2.getStringRepresentation(f);
+                            final String filepath = UrlFileUtil.getStringRepresentation(f);
                             LOGGER.info("Parsing file: " + filepath);
 
                             if (filepath.toLowerCase().endsWith(".gz")) {
@@ -324,28 +331,27 @@ public class DocumentParserNodeModel extends NodeModel {
                             parser.addDocumentParsedListener(new InternalDocumentParsedEventListener());
 
                             parser.parseDocument(is);
-                        } catch (Exception e) {
+                        } catch (final Exception e) {
                             LOGGER.error("Could not parse file: " + f.toString(), e);
                             setWarningMessage("Could not parse all files properly!");
                         } finally {
                             if (is != null) {
                                 try {
                                     is.close();
-                                } catch (IOException e) {
-                                    LOGGER.debug("Could not close input stream of file:"
-                                        + f.toString());
+                                } catch (final IOException e) {
+                                    LOGGER.debug("Could not close input stream of file:" + f.toString());
                                 }
                             }
                         }
                     }
                     parser.clean();
-                } catch (InstantiationException e) {
+                } catch (final InstantiationException e) {
                     LOGGER.error("Parser instance could not be created.");
                     setWarningMessage("Could not parse files!");
-                } catch (InterruptedException e) {
+                } catch (final InterruptedException e) {
                     LOGGER.warn("Parser thread was interrupted, could not parse all files.");
                     setWarningMessage("Could not parse all files properly!");
-                } catch (CanceledExecutionException e) {
+                } catch (final CanceledExecutionException e) {
                     // handled by main executor thread
                 } finally {
                     semaphore.release();
@@ -373,16 +379,16 @@ public class DocumentParserNodeModel extends NodeModel {
      * {@inheritDoc}
      */
     @Override
-    protected void loadInternals(final File nodeInternDir, final ExecutionMonitor exec) throws IOException,
-        CanceledExecutionException {
+    protected void loadInternals(final File nodeInternDir, final ExecutionMonitor exec)
+        throws IOException, CanceledExecutionException {
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    protected void saveInternals(final File nodeInternDir, final ExecutionMonitor exec) throws IOException,
-        CanceledExecutionException {
+    protected void saveInternals(final File nodeInternDir, final ExecutionMonitor exec)
+        throws IOException, CanceledExecutionException {
     }
 
     /**
@@ -392,7 +398,7 @@ public class DocumentParserNodeModel extends NodeModel {
     protected void reset() {
         try {
             m_dtBuilder.getAndCloseDataTable();
-        } catch (Exception e) { /* Do noting just try */
+        } catch (final Exception e) { /* Do noting just try */
         }
     }
 

@@ -54,6 +54,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
@@ -688,7 +689,7 @@ public class PubMedDocumentParser extends DefaultHandler implements DocumentPars
      * {@inheritDoc}
      */
     @Override
-    public void parseDocument(final InputStream is) throws Exception {
+    public void parseDocument(final InputStream is) throws SAXException, IOException, ParserConfigurationException {
         m_storeInList = false;
         try {
             final SAXParser parser = SAXParserFactory.newInstance().newSAXParser();

@@ -48,13 +48,17 @@
 package org.knime.ext.textprocessing.nodes.source.grabber;
 
 import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 
+import javax.xml.parsers.ParserConfigurationException;
+
+import org.knime.core.node.CanceledExecutionException;
 import org.knime.ext.textprocessing.data.Document;
 import org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener;
-
-
+import org.xml.sax.SAXException;
 
 /**
  * An interface which provides method declarations to get the number of results
@@ -118,24 +122,26 @@ public interface DocumentGrabber {
     throws Exception;
 
     /**
-     * Fetches and the documents resulting from the given query and writes
-     * them to the given directory. Afterwards the documents are parsed and
-     * instances of {@link org.knime.ext.textprocessing.data.Document}s are
-     * created. After each parsed document all registered
-     * {@link org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener}
-     * are notified.
+     * Fetches and the documents resulting from the given query and writes them to the given directory. Afterwards the
+     * documents are parsed and instances of {@link org.knime.ext.textprocessing.data.Document}s are created. After each
+     * parsed document all registered
+     * {@link org.knime.ext.textprocessing.nodes.source.parser.DocumentParsedEventListener} are notified.
      *
      * @param directory The directory to save the documents to.
      * @param query The query to send to the bibliographic database.
-     * @throws Exception If grabber cannot connect to the server or something
-     * else goes wrong.
-     * @since 3.8
+     * @throws IOException IO related
+     * @throws CanceledExecutionException Thrown if the execution is canceled
+     * @throws URISyntaxException Thrown  if a string could not be parsed as a URI reference
+     * @throws InterruptedException Thrown if thread is interrupted
+     * @throws ParserConfigurationException Thrown if parser could not be configured or instantiated
+     * @throws SAXException Thrown if a SAXError occurs
+     * @throws Exception If grabber cannot connect to the server or something else goes wrong. Only thrown if default
+     *             implementation is used.
+     * @since 4.0
      */
-    default public void fetchAndParseDocuments(final URL directory, final Query query) throws Exception {
-        /**
-         * TODO: I know that the old fetchAndParseDocuments method does this as well, but you should not throw a
-         * generic exception, but instead throw proper, specific exceptions.
-         */
+    public default void fetchAndParseDocuments(final URL directory, final Query query)
+        throws IOException, CanceledExecutionException, URISyntaxException, InterruptedException,
+        ParserConfigurationException, SAXException, Exception {
         fetchAndParseDocuments(new File(directory.getFile()), query);
     }
 

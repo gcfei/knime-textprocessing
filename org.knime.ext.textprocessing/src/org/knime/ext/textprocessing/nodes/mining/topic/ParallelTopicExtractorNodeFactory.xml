@@ -20,6 +20,10 @@
             The node uses the <a href="http://mallet.cs.umass.edu/">"MALLET: A Machine Learning for Language Toolkit."</a> 
             topic modeling library.
             </p>
+            <p><i>Note:</i> The current version of the <a href="http://mallet.cs.umass.edu/">"MALLET: A Machine Learning 
+            for Language Toolkit."</a> library contains a known bug. While executing the node in a loop, it might end up in 
+            an ArrayOutOfBoundsException. A possible solution to this can be setting the number of threads to 1.
+            </p>
         </intro>
         <option name="Document column">
             The column that contains the pre-processed document.
